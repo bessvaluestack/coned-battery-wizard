@@ -5,9 +5,9 @@ import { readFileSync } from 'node:fs';
 import loadHighs from '../vendor/highs/highs.mjs';
 import { buildIndex, T, DT_HOURS } from '../js/timeidx.js';
 import { buildTariffArrays, billFromProfile, peakOf } from '../js/tariff.js';
-import { buildStack, billFor, lpInputs, programRevenue, summarize, eventEnergyCheck, MIN_PERFORMANCE } from '../js/model.js';
+import { buildStack, billFor, monthlyBills, lpInputs, programRevenue, summarize, eventEnergyCheck, MIN_PERFORMANCE } from '../js/model.js';
 import { buildLP, extractSolution, solveWithCycleCap } from '../js/lp.js';
-import { parseIntervalCsv, scaleToBill, stats } from '../js/profiles.js';
+import { parseIntervalCsv, scaleToBill, scaleToMonthlyBills, stats } from '../js/profiles.js';
 
 const read = (p) => JSON.parse(readFileSync(new URL('../data/' + p, import.meta.url), 'utf8'));
 const data = {
@@ -178,6 +178,23 @@ test('interval CSV parser: ISO kW, Green Button date+time kWh, hourly resample',
   assert.ok(Math.abs(b.kw[0] - 50) < 1e-9 && Math.abs(b.kw[3] - 50) < 1e-9);
   const s = stats(b.kw);
   assert.ok(Math.abs(s.annualKwh - 50 * 8760) < 1);
+});
+
+test('monthly bills sum to the annual bill, and per-month scaling hits each target', () => {
+  for (const rateNo of [1, 2]) {
+    const stack = buildStack({ rateNo, voltage: 'lt', region: 'nyc', zone: 'J', demandIntervalMin: 15, taxPct: 2.5, supply: { mode: rateNo === 2 ? 'coned_mhp' : 'coned_msc' } }, data);
+    const shape = Float64Array.from(read('profiles/highrise_central_cooling.json').kw);
+    const months = monthlyBills(stack, shape);
+    assert.ok(Math.abs(months.reduce((a, v) => a + v, 0) - billFor(stack, shape).total) < 1e-6);
+    const targets = months.map((v, m) => v * (0.6 + 0.07 * m));
+    targets[1] = 10; // below February's fixed charges
+    const { kw, scales, floor } = scaleToMonthlyBills(shape, targets, (k) => monthlyBills(stack, k), stack.idx.month);
+    const got = monthlyBills(stack, kw);
+    for (let m = 0; m < 12; m++) {
+      if (m === 1) { assert.equal(scales[1], 0); assert.ok(targets[1] < floor[1]); continue; }
+      assert.ok(Math.abs(got[m] - targets[m]) < 1e-6 * targets[m], `month ${m + 1}: ${got[m]} vs ${targets[m]}`);
+    }
+  }
 });
 
 test('annual bill scaling hits the target', () => {

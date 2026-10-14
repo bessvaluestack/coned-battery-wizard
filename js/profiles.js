@@ -21,6 +21,18 @@ export function scaleToBill(shape, targetBill, billFn) {
   return { kw: scaled(s), scale: s };
 }
 
+// Scale each calendar month of a shape on its own so its modelled bill hits
+// that month's target. A month's bill is affine in the scale (fixed charges
+// plus scale x everything else), so the bills at 0 and 1 give the exact
+// factor; a target below the fixed charges clamps to zero.
+export function scaleToMonthlyBills(shape, targets, monthBillsFn, monthOf) {
+  const zero = monthBillsFn(new Float64Array(shape.length)), one = monthBillsFn(shape);
+  const scales = targets.map((target, m) => (one[m] > zero[m] ? Math.max(0, (target - zero[m]) / (one[m] - zero[m])) : 0));
+  const kw = new Float64Array(shape.length);
+  for (let t = 0; t < kw.length; t++) kw[t] = shape[t] * scales[monthOf[t] - 1];
+  return { kw, scales, floor: zero };
+}
+
 // ---- interval CSV parsing -------------------------------------------------
 // Accepts: a timestamp column (ISO, "M/D/YYYY H:MM", "YYYY-MM-DD HH:MM[:SS]",
 // with optional T/Z) or separate date + time columns (Green Button style),

@@ -1,12 +1,13 @@
 // Wizard controller: state, rendering, and the run.
 import { buildIndex, DT_HOURS, MONTH_NAMES, labelOf } from './timeidx.js';
-import { buildStack, billFor, lpInputs, programRevenue, summarize, eventEnergyCheck, MIN_PERFORMANCE, RATE_LABELS } from './model.js';
+import { buildStack, billFor, monthlyBills, lpInputs, programRevenue, summarize, eventEnergyCheck, MIN_PERFORMANCE, RATE_LABELS } from './model.js';
 import { SUPPLY_MODES } from './supply.js';
 import { PROGRAM_IDS, PROGRAM_LABELS } from './programs.js';
-import { stats, scaleToBill, parseIntervalCsv, toCsv } from './profiles.js';
+import { stats, scaleToBill, scaleToMonthlyBills, parseIntervalCsv, toCsv } from './profiles.js';
 import { solveDispatch } from './solve.js';
 import { barChart, lineChart } from './charts.js';
 import { monthlyEnergyKwh, monthlyPeakKw } from './tariff.js';
+import { TEMPLATE_URL, XLSX_TYPE, proformaData, fillProforma } from './proforma.js';
 import * as edition from './edition.js';
 
 const STEPS = ['Rate', 'Supply', 'Riders', 'Load', 'Battery', 'Results'];
@@ -18,7 +19,7 @@ const DEFAULTS = {
   adjustments: { kwh: null, sbcDemand: true, extraDemand: 0 },
   supply: { mode: 'coned_msc', capacityRate: null, mfc: null, reconciliation: null, taxReimbursement: null, fixedRate: 0.09, adder: 0.02, escoCapacity: 0 },
   programs: { enabled: { csrp: false, dlrp: false, term_dlm: false }, network: '', pledgeKw: 100, participation: 'direct', events: { csrp: 3, dlrp: 2, term_dlm: 3 }, termDlm: { reservationRate: '', performanceRate: '' } },
-  load: { mode: 'preset', presetId: 'highrise_central_cooling', billTarget: null, billShape: 'highrise_central_cooling', uploadUnits: 'auto', loadTab: 'preset' },
+  load: { mode: 'preset', presetId: 'highrise_central_cooling', billTarget: null, billMode: 'annual', monthlyBills: null, billShape: 'highrise_central_cooling', uploadUnits: 'auto', loadTab: 'preset' },
   battery: { kw: 200, kwh: 400, rte: 88, usable: 95, cycles: 300, throughputCost: 0, capexK: '' },
 };
 
@@ -98,9 +99,10 @@ let loadCache = { key: null, value: null };
 async function getLoad() {
   const L = state.load;
   const stackKey = stackCache.key || JSON.stringify(stackConfig());
+  const monthly = L.billMode === 'monthly' && L.monthlyBills;
   let key;
   if (L.mode === 'preset') key = `preset:${L.presetId}`;
-  else if (L.mode === 'bill') key = `bill:${L.billTarget}:${L.billShape}:${stackKey}`;
+  else if (L.mode === 'bill') key = `bill:${monthly ? L.monthlyBills.join(',') : L.billTarget}:${L.billShape}:${stackKey}`;
   else key = `upload:${uploaded ? uploaded.name + uploaded.kw.length : 'none'}`;
   if (loadCache.key === key) return loadCache.value;
   let value = null;
@@ -110,8 +112,15 @@ async function getLoad() {
   } else if (L.mode === 'bill') {
     const p = await loadPreset(L.billShape);
     const stack = getStack();
-    const { kw, scale } = scaleToBill(p.kw, +L.billTarget || 0, (k) => billFor(stack, k).total);
-    value = { kw, label: `Estimated from ${fmt$(+L.billTarget)} / yr (${p.name} shape, x${scale.toFixed(3)})`, source: 'bill', meta: { shape: p.name, scale } };
+    if (monthly) {
+      const targets = L.monthlyBills.map((v) => +v || 0);
+      const { kw, scales, floor } = scaleToMonthlyBills(p.kw, targets, (k) => monthlyBills(stack, k), stack.idx.month);
+      const total = targets.reduce((a, v) => a + v, 0);
+      value = { kw, label: `Estimated from 12 monthly bills totalling ${fmt$(total)} / yr (${p.name} shape, x${Math.min(...scales).toFixed(2)} to x${Math.max(...scales).toFixed(2)})`, source: 'bill', meta: { shape: p.name, scales, belowFixed: targets.map((v, m) => v < floor[m]) } };
+    } else {
+      const { kw, scale } = scaleToBill(p.kw, +L.billTarget || 0, (k) => billFor(stack, k).total);
+      value = { kw, label: `Estimated from ${fmt$(+L.billTarget)} / yr (${p.name} shape, x${scale.toFixed(3)})`, source: 'bill', meta: { shape: p.name, scale } };
+    }
   } else if (uploaded) {
     value = { kw: uploaded.kw, label: `Uploaded: ${uploaded.name}`, source: 'upload', meta: uploaded.meta };
   }
@@ -119,12 +128,19 @@ async function getLoad() {
   return value;
 }
 
-// A preset's modelled annual bill under the current rate and supply, to the
-// nearest $1,000: where the "From the annual bill" estimate starts.
+// Modelled bills for a profile under the current rate and supply: where the
+// "From the annual bill" estimate starts (the annual total to the nearest
+// $1,000, months to the nearest $100).
 const roundBill = (v) => Math.round(v / 1000) * 1000;
-async function presetBill(id) {
-  const p = await loadPreset(id);
-  return roundBill(billFor(getStack(), p.kw).total);
+const roundMonth = (v) => Math.round(v / 100) * 100;
+function billsFor(kw) {
+  const stack = getStack();
+  return { annual: billFor(stack, kw).total, monthly: monthlyBills(stack, kw) };
+}
+async function presetBills(id) { return billsFor((await loadPreset(id)).kw); }
+function setBillTargets(bills) {
+  state.load.billTarget = roundBill(bills.annual);
+  state.load.monthlyBills = bills.monthly.map(roundMonth);
 }
 
 // ---------------------------------------------------------------- rendering
@@ -164,19 +180,22 @@ function bindInputs(root) {
       let v;
       if (input.type === 'checkbox') v = input.checked;
       else if (input.type === 'number') v = input.value === '' ? (input.dataset.nullable ? null : 0) : +input.value;
+      else if (input.type === 'range') v = +input.value;
       else v = input.value;
       if (input.dataset.cast === 'int') v = parseInt(v, 10);
       setPath(state, input.dataset.path, v);
       if (input.dataset.path === 'region') state.zone = v === 'nyc' ? 'J' : (state.zone === 'J' ? 'H' : state.zone);
       // Rate II customers are on Rider M hourly pricing by default.
       if (input.dataset.path === 'rateNo' && v === 2 && state.supply.mode === 'coned_msc') state.supply.mode = 'coned_mhp';
-      // A new load shape restarts the bill estimate at that preset's own bill; the user edits from there.
+      // A new load shape restarts the bill estimate at that preset's own bills; the user edits from there.
       if (input.dataset.path === 'load.billShape') {
-        try { state.load.billTarget = await presetBill(v); } catch (e) { edition.logError(e); }
+        try { setBillTargets(await presetBills(v)); } catch (e) { edition.logError(e); }
       }
       results = null;
       render();
     });
+    // Sliders mirror their number box while dragging and commit on release.
+    if (input.type === 'range') input.addEventListener('input', () => { const box = document.getElementById(input.dataset.mirror); if (box) box.value = input.value; });
   });
 }
 
@@ -187,6 +206,11 @@ function numInput(path, value, { step = 'any', min, max, unit, nullable = false,
   const v = value === null || value === undefined ? '' : value;
   const inp = `<input type="number" id="f-${path.replace(/\./g, '-')}" data-path="${path}" ${nullable ? 'data-nullable="1"' : ''} value="${v}" step="${step}" ${min !== undefined ? `min="${min}"` : ''} ${max !== undefined ? `max="${max}"` : ''} placeholder="${placeholder}">`;
   return unit ? `<div class="unit">${inp}<span>${unit}</span></div>` : inp;
+}
+// A slider from 50% to 200% of a reference bill, paired with the number box for the same path.
+function billSlider(path, value, ref, step, label) {
+  const lo = Math.max(0, Math.floor(ref * 0.5 / step) * step), hi = Math.max(step, Math.ceil(ref * 2 / step) * step);
+  return `<input type="range" data-path="${path}" data-mirror="f-${path.replace(/\./g, '-')}" min="${lo}" max="${hi}" step="${step}" value="${Math.min(hi, Math.max(lo, +value || 0))}" aria-label="${label}">`;
 }
 function select(path, value, options, cast) {
   return `<select id="f-${path.replace(/\./g, '-')}" data-path="${path}" ${cast ? `data-cast="${cast}"` : ''}>${options.map(([v, l]) => `<option value="${v}" ${String(v) === String(value) ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
@@ -337,7 +361,11 @@ async function stepRiders() {
 async function stepLoad() {
   const L = state.load;
   const tab = L.loadTab || L.mode;
-  if (tab === 'bill' && L.billTarget == null) L.billTarget = await presetBill(L.billShape);
+  const ref = tab === 'bill' ? await presetBills(L.billShape) : null;
+  if (ref && (L.billTarget == null || !L.monthlyBills)) {
+    if (L.billTarget == null) L.billTarget = roundBill(ref.annual);
+    if (!L.monthlyBills) L.monthlyBills = ref.monthly.map(roundMonth);
+  }
   const presetCards = data.presets.map((p) => `<label class="choice"><input type="radio" name="presetId" data-path="load.presetId" value="${p.id}" ${L.presetId === p.id ? 'checked' : ''}><b>${esc(p.name)}</b><small>${esc(p.description)}</small></label>`).join('');
   return `
     <h2>Load profile</h2>
@@ -347,11 +375,7 @@ async function stepLoad() {
     </div>
     <div class="tabpane">
       ${tab === 'preset' ? `<div class="choices">${presetCards}</div><p class="note">${edition.PRESET_NOTE}</p>` : ''}
-      ${tab === 'bill' ? `<div class="grid2">
-          ${field('Annual electricity bill', numInput('load.billTarget', L.billTarget, { step: 1000, min: 0, unit: '$ / year' }), 'Total of twelve bills, delivery plus supply, taxes included. Starts at the modelled bill for the selected load shape: replace it with the actual figure.')}
-          ${field('Building\'s load shape', select('load.billShape', L.billShape, data.presets.map((p) => [p.id, p.name])), 'The preset whose shape is scaled until the modelled bill matches.')}
-        </div>
-        <p class="note">The scale is solved by bisection on the modelled bill under the current rate, adjustments, supply and tax settings, so changing those re-estimates the profile.</p>` : ''}
+      ${tab === 'bill' ? billPane(L, ref) : ''}
       ${tab === 'upload' ? `<div class="grid2">
           <div class="field"><label class="lab" for="f-upload">Interval file (CSV)</label><input type="file" id="f-upload" accept=".csv,.txt,text/csv"><span class="help">A timestamp column (ISO or M/D/YYYY H:MM) or separate date and time columns, plus a kW or kWh column. Any year; 5 to 60-minute intervals; Feb 29 dropped; gaps interpolated.</span></div>
           ${field('Units', select('load.uploadUnits', L.uploadUnits, [['auto', 'Detect from the header'], ['kw', 'kW (average demand)'], ['kwh', 'kWh per interval']]))}
@@ -361,6 +385,27 @@ async function stepLoad() {
     </div>
     <div id="loadSummary"><p class="note">Loading profile...</p></div>
     ${navButtons()}`;
+}
+
+function billPane(L, ref) {
+  const mode = L.billMode === 'monthly' ? 'monthly' : 'annual';
+  const toggle = `<div class="seg" role="group" aria-label="Bill input">${[['annual', 'Annual total'], ['monthly', 'Monthly bills']].map(([k, l]) => `<button type="button" data-billmode="${k}" class="${mode === k ? 'active' : ''}" aria-pressed="${mode === k}">${l}</button>`).join('')}</div>`;
+  const shape = field('Building\'s load shape', select('load.billShape', L.billShape, data.presets.map((p) => [p.id, p.name])), 'The preset whose shape is scaled until the modelled bill matches.');
+  if (mode === 'annual') {
+    return `${toggle}<div class="grid2">
+        ${field('Annual electricity bill', numInput('load.billTarget', L.billTarget, { step: 1000, min: 0, unit: '$ / year' }) + billSlider('load.billTarget', L.billTarget, ref.annual, 1000, 'Annual electricity bill'), 'Total of twelve bills, delivery plus supply, taxes included. Starts at the modelled bill for the selected load shape: replace it with the actual figure.')}
+        ${shape}
+      </div>
+      <p class="note">The scale is solved by bisection on the modelled bill under the current rate, adjustments, supply and tax settings, so changing those re-estimates the profile. Sliders run from half to twice the shape's modelled bill.</p>`;
+  }
+  const total = L.monthlyBills.reduce((a, v) => a + (+v || 0), 0);
+  const rows = MONTH_NAMES.map((name, m) => `<div class="billrow"><span>${name}</span>${numInput(`load.monthlyBills.${m}`, L.monthlyBills[m], { step: 100, min: 0, unit: '$' })}${billSlider(`load.monthlyBills.${m}`, L.monthlyBills[m], ref.monthly[m], 100, `${name} bill`)}</div>`).join('');
+  return `${toggle}<div class="grid2">
+      ${shape}
+      ${field('Annual total', `<div class="figure">${fmt$(total)}</div>`, 'Sum of the twelve monthly bills.')}
+    </div>
+    <div class="billgrid">${rows}</div>
+    <p class="note">Each bill is delivery plus supply, taxes included. Each calendar month of the shape is scaled on its own until its modelled bill matches, so changing the rate, supply or tax settings re-estimates the profile. Months start at the shape's modelled bills; sliders run from half to twice those. Calendar months stand in for Con Edison's meter-read billing periods.</p>`;
 }
 
 async function afterLoadStep() {
@@ -373,11 +418,27 @@ async function afterLoadStep() {
       try {
         const shown = await getLoad();
         if (state.load.mode === 'preset') state.load.billShape = state.load.presetId;
-        state.load.billTarget = shown ? roundBill(billFor(getStack(), shown.kw).total) : await presetBill(state.load.billShape);
+        setBillTargets(shown ? billsFor(shown.kw) : await presetBills(state.load.billShape));
       } catch (e) { edition.logError(e); }
     }
     state.load.loadTab = tab;
     if (tab !== 'upload' || uploaded) state.load.mode = tab;
+    results = null; render();
+  }));
+  panel.querySelectorAll('[data-billmode]').forEach((b) => b.addEventListener('click', async () => {
+    const L = state.load, mode = b.dataset.billmode;
+    if (mode === (L.billMode === 'monthly' ? 'monthly' : 'annual')) return;
+    try {
+      if (mode === 'monthly') {
+        // Keep the monthly pattern (or the shape's) and match the annual total.
+        const base = L.monthlyBills || (await presetBills(L.billShape)).monthly.map(roundMonth);
+        const sum = base.reduce((a, v) => a + (+v || 0), 0), target = +L.billTarget || 0;
+        L.monthlyBills = base.map((v) => roundMonth(sum > 0 ? (+v || 0) * target / sum : target / 12));
+      } else {
+        L.billTarget = roundBill((L.monthlyBills || []).reduce((a, v) => a + (+v || 0), 0));
+      }
+    } catch (e) { edition.logError(e); }
+    L.billMode = mode;
     results = null; render();
   }));
   const fileInput = $('#f-upload');
@@ -412,6 +473,7 @@ async function afterLoadStep() {
         <div><div id="chartMonthlyKwh"></div></div>
         <div><div id="chartMonthlyPeak"></div></div>
       </div>
+      ${load.meta && load.meta.belowFixed && load.meta.belowFixed.some(Boolean) ? `<p class="flag">${load.meta.belowFixed.map((b, m) => (b ? MONTH_NAMES[m] : null)).filter(Boolean).join(', ')}: the bill is below that month's fixed charges, so the month is modelled with no load.</p>` : ''}
       ${state.rateNo !== 2 && s.peakKw > 1500 ? '<p class="flag">Peak above 1,500 kW: Con Edison bills such customers under Rate II (mandatory time-of-day).</p>' : ''}
       ${state.rateNo === 2 && s.peakKw < 900 ? '<p class="flag">Peak below 900 kW for a year moves a Rate II customer back to Rate I.</p>' : ''}
       <div class="inline" style="margin-top:0.6rem"><button type="button" class="btn small" id="dlProfile">Download profile as CSV</button><span class="note">timestamp,kw on the 2027 model calendar</span></div>`;
@@ -561,7 +623,7 @@ async function stepResults() {
     <div id="chartSoc"></div>
     <h3>Assumptions and provenance</h3>
     <ul class="tight">${assumptions.map((a) => `<li>${a}</li>`).join('')}</ul>
-    <div class="inline" style="margin-top:1rem"><button type="button" class="btn small" id="dlJson">Download results (JSON)</button><button type="button" class="btn small" id="dlDispatch">Download dispatch (CSV)</button></div>
+    <div class="inline" style="margin-top:1rem"><button type="button" class="btn small" id="dlXlsx">Download pro-forma (XLSX)</button><button type="button" class="btn small" id="dlJson">Download results (JSON)</button><button type="button" class="btn small" id="dlDispatch">Download dispatch (CSV)</button></div>
     <div class="actions"><button type="button" class="btn" data-nav="-1">Back to battery</button><button type="button" class="btn" id="rerun">Change inputs and re-run</button></div>`;
   return html;
 }
@@ -604,6 +666,29 @@ function afterResults() {
   $('#weekSel').addEventListener('change', drawWeek);
   drawWeek();
   $('#rerun').addEventListener('click', () => go(4));
+  $('#dlXlsx').addEventListener('click', async (e) => {
+    const btn = e.currentTarget, label = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Building the pro-forma...';
+    try {
+      const res = await fetch(TEMPLATE_URL);
+      if (!res.ok) throw new Error(`pro-forma template: ${res.status}`);
+      const template = new Uint8Array(await res.arrayBuffer());
+      await new Promise((r) => setTimeout(r, 30)); // let the button repaint before the zip work
+      const L = state.load;
+      const programMonths = Object.fromEntries(Object.entries(data.programs.programs).map(([id, p]) => [id, (p.season && p.season.months) || [5, 6, 7, 8, 9]]));
+      const d = proformaData({ stack: R.stack, load: R.load.kw, sol: R.sol, summary: S, revenue: R.revenue, battery: R.battery }, {
+        rateLabel: `SC 8 Rate ${roman[state.rateNo]} ${state.voltage.toUpperCase()}, ${state.region === 'nyc' ? 'NYC' : 'Westchester'} (zone ${R.stack.supply.zone}); ${SUPPLY_MODES[state.supply.mode]}`,
+        programMonths,
+        monthlyBills: R.load.source === 'bill' && L.billMode === 'monthly' && L.monthlyBills ? L.monthlyBills : null,
+      });
+      download('sc8_battery_proforma.xlsx', fillProforma(template, d), XLSX_TYPE);
+    } catch (err) {
+      edition.logError(err);
+      btn.insertAdjacentHTML('afterend', '<span class="bad">The pro-forma could not be built. Reload the page and try again.</span>');
+    } finally {
+      btn.disabled = false; btn.textContent = label;
+    }
+  });
   $('#dlJson').addEventListener('click', () => {
     const out = { inputs: stackConfig(), battery: R.battery, load: { label: R.load.label, source: R.load.source, stats: stats(R.load.kw) }, baseline: R.baseline, withBattery: R.withB, programRevenue: R.revenue, summary: R.summary, generated: new Date().toISOString() };
     download('sc8_battery_results.json', JSON.stringify(out, (k, v) => (v instanceof Float64Array || v instanceof Int32Array ? undefined : v), 1), 'application/json');

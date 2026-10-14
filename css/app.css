@@ -137,6 +137,16 @@ tr.sub td { color: var(--muted); }
 .tabs button { background: none; border: 0; border-bottom: 3px solid transparent; padding: 0.5rem 0.8rem; cursor: pointer; color: var(--muted); font-weight: 600; }
 .tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
 .tabpane { padding-top: 1rem; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.seg button { background: var(--surface); border: 0; padding: 0.4rem 0.8rem; cursor: pointer; color: var(--muted); font-weight: 600; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.active { background: var(--accent-soft); color: var(--accent); }
+input[type="range"] { width: 100%; margin: 0.35rem 0 0; accent-color: var(--accent); }
+.figure { font-family: var(--font-mono); font-size: 1.15rem; padding: 0.35rem 0; }
+.billgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 0.45rem 1.4rem; margin-top: 1rem; }
+.billrow { display: grid; grid-template-columns: 2.4rem minmax(6.5rem, 8rem) minmax(0, 1fr); align-items: center; gap: 0.5rem; }
+.billrow > span { color: var(--muted); font-size: 0.85rem; }
+.billrow input[type="range"] { margin: 0; }
 
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.7rem; margin-top: 1rem; }
 .kpi { background: var(--surface-2); border-radius: var(--radius); padding: 0.7rem 0.9rem; min-width: 0; }

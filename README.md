@@ -26,17 +26,44 @@ one-time bridge (see *Data*).
    Rider AC Term-DLM (pay-as-bid, rates entered). Pledge, participation and
    events per season are scenario inputs.
 4. **Load**: four preset 35,040-interval profiles, an estimate scaled from the
-   annual bill (bisection on the modelled bill under the chosen rate and
-   supply), or an uploaded interval CSV (ISO or US timestamps, or Green
-   Button date + time columns; kW or kWh; any interval 5 to 60 min).
+   bills (an annual total, by bisection on the modelled bill, or twelve
+   calendar-month bills, each month of the shape scaled on its own; boxes
+   start at the shape's modelled bills, sliders run 50% to 200% of them), or
+   an uploaded interval CSV (ISO or US timestamps, or Green Button date + time
+   columns; kW or kWh; any interval 5 to 60 min).
 5. **Battery**: kW, kWh, round-trip efficiency, usable depth, annual cycle
    limit, optional throughput cost and installed cost (k$). Warns when the
    battery cannot carry one full program event at the pledged kW (usable kWh
    below pledge x event hours / discharge efficiency, or kW below the pledge).
 6. **Results**: annual savings (bill savings + program revenue), the bill by
    component before and after, monthly peaks, a week of dispatch with state
-   of charge, assumptions and provenance, JSON / CSV export. CSRP or DLRP
-   delivering under 80% of the pledge (weakest event) is flagged.
+   of charge, assumptions and provenance, JSON / CSV export, and the owner
+   pro-forma (XLSX, below). CSRP or DLRP delivering under 80% of the pledge
+   (weakest event) is flagged.
+
+## Owner pro-forma (XLSX)
+
+`templates/proforma.xlsx` is the owner's multifamily storage workbook with a
+program revenue stream added; the results page fills it in the browser
+(`js/proforma.js`, zip handling by the vendored `fflate`, MIT):
+
+- Hourly_Operations: baseline and dispatch as hourly averages of the run
+  (positive = discharge), and the hour's all-in energy rate, taxes included.
+- Value_Streams: the run's 15-minute billing peaks, demand savings (every
+  demand window, SBC and supply capacity) and program revenue by month; the
+  workbook's own formulas give arbitrage savings, which match the run.
+- Utility_Rates: effective monthly rates for its readiness checks and bill
+  reconciliation, and the monthly bills when they were entered.
+- Inputs: utility, rate and battery specs. Capital, O&M, analysis period,
+  discount rate and resiliency stay as in the template for the user to set.
+
+Excel recalculates on open (the template carries no cached results). To
+rebuild the template after the source workbook (kept out of git in `doc/`,
+since it carries author and path metadata) changes:
+
+```sh
+node scripts/make_proforma_template.mjs doc/<workbook>.xlsx
+```
 
 ## Model
 

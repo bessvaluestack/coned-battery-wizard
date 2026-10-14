@@ -91,6 +91,16 @@ export function billFor(stack, importKw) {
   return { ...b, energyComponents: comps, tax, total: pretax + tax };
 }
 
+// The annual bill by calendar month: energy + demand + a twelfth of the fixed
+// charges, taxes included. Sums to billFor().total.
+export function monthlyBills(stack, importKw) {
+  const idx = stack.idx, out = new Array(12).fill(0);
+  for (let t = 0; t < idx.T; t++) out[idx.month[t] - 1] += stack.price[t] * importKw[t];
+  for (let m = 0; m < 12; m++) out[m] = out[m] * DT_HOURS + stack.ta.fixedAnnual / 12;
+  for (const g of monthlyPeakGroups(stack.charges, idx)) out[g.month - 1] += g.charge.rate * peakOf(importKw, g.idx, stack.demandIntervalMin);
+  return out.map((v) => v * stack.taxFactor);
+}
+
 // LP inputs for the worker: merge every $/kW determinant that shares a
 // (month, window) into one peak term with the summed rate.
 export function lpInputs(stack, load, battery, withPrograms) {

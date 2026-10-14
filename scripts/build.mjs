@@ -18,6 +18,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { unzipSync, strFromU8 } from '../vendor/fflate/fflate.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -169,7 +170,7 @@ const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (
 
 export function build({ client = false, out = join(ROOT, 'dist') } = {}) {
   out = resolve(out);
-  if (out === ROOT || ROOT.startsWith(out + sep) || ['js', 'css', 'data', 'img', 'vendor', 'scripts', 'tests'].some((d) => out === join(ROOT, d))) {
+  if (out === ROOT || ROOT.startsWith(out + sep) || ['js', 'css', 'data', 'img', 'templates', 'vendor', 'scripts', 'tests'].some((d) => out === join(ROOT, d))) {
     throw new Error(`refusing to build into ${out}`);
   }
   rmSync(out, { recursive: true, force: true });
@@ -178,6 +179,7 @@ export function build({ client = false, out = join(ROOT, 'dist') } = {}) {
   cpSync(join(ROOT, 'index.html'), join(out, 'index.html'));
   cpSync(join(ROOT, 'vendor'), join(out, 'vendor'), { recursive: true });
   cpSync(join(ROOT, 'img'), join(out, 'img'), { recursive: true });
+  cpSync(join(ROOT, 'templates'), join(out, 'templates'), { recursive: true });
   mkdirSync(join(out, 'css'));
   for (const f of readdirSync(join(ROOT, 'css'))) {
     const src = readFileSync(join(ROOT, 'css', f), 'utf8');
@@ -208,10 +210,16 @@ export function build({ client = false, out = join(ROOT, 'dist') } = {}) {
       const r = spawnSync(process.execPath, ['--input-type=module', '--check'], { input: readFileSync(file) });
       if (r.status !== 0) problems.push(`${relative(out, file)}: does not parse after comment stripping\n${r.stderr}`);
     }
-    for (const file of files.filter((f) => /\.(html|css|js|mjs|json)$/.test(f))) {
+    // Text files as they are; workbooks part by part (author and local path included).
+    const texts = files.flatMap((file) => {
       const rel = relative(out, file);
+      if (/\.(html|css|js|mjs|json)$/.test(file)) return [{ rel, text: readFileSync(file, 'utf8') }];
+      if (!file.endsWith('.xlsx')) return [];
+      return Object.entries(unzipSync(readFileSync(file))).filter(([p]) => /\.(xml|rels)$/.test(p)).map(([p, b]) => ({ rel: `${rel}:${p}`, text: strFromU8(b) }));
+    });
+    for (const { rel, text } of texts) {
       const vendor = rel.startsWith('vendor' + sep);
-      const text = readFileSync(file, 'utf8');
+      if (/absPath|<cp:lastModifiedBy>[^<]/.test(text)) problems.push(`${rel}: carries an author or a local path`);
       for (const w of bannedWords(text)) problems.push(`${rel}: contains the banned word "${w}"`);
       if (vendor) continue;
       for (const re of LEAK_TERMS) {
