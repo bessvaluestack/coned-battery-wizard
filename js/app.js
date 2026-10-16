@@ -11,7 +11,7 @@ import { TEMPLATE_URL, XLSX_TYPE, proformaData, fillProforma } from './proforma.
 import * as edition from './edition.js';
 
 const STEPS = ['Rate', 'Supply', 'Riders', 'Load', 'Battery', 'Results'];
-const STORAGE_KEY = 'sc8-battery-wizard.v2';
+const STORAGE_KEY = 'coned-battery-wizard.v1';
 
 const DEFAULTS = {
   step: 0,
