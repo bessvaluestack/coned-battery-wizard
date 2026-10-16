@@ -1,0 +1,92 @@
+{
+ "corpus_ced_sc2_rate1": {
+  "id": "corpus_ced_sc2_rate1",
+  "name": "Con Edison Rate I - General - Small",
+  "service_class": "SC 2",
+  "applicability": "To all Customers other than those billed under other Rates.",
+  "rate_basis": "delivery_only",
+  "fixed_charge_per_month": 34.0,
+  "energy": {
+   "units": "usd_per_kwh",
+   "seasons": [
+    {
+     "name": "summer",
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "tou": [
+      {
+       "name": "all_hours",
+       "days": "all",
+       "rate": 0.2038,
+       "lineage": [
+        "ny.ced.psc10.sc2.rate1.energy.kwh.m6_7_8_9.all.h_all"
+       ]
+      }
+     ]
+    },
+    {
+     "name": "other_months",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      10,
+      11,
+      12
+     ],
+     "tou": [
+      {
+       "name": "all_hours",
+       "days": "all",
+       "rate": 0.1709,
+       "lineage": [
+        "ny.ced.psc10.sc2.rate1.energy.kwh.m1_2_3_4_5_10_11_12.all.h_all"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "demand": {
+   "units": "usd_per_kw_month",
+   "charges": []
+  },
+  "book_vintage": "ny.ced.psc10@2026-08-01",
+  "conversion_notes": null,
+  "unmodelled": [
+   {
+    "what": "minimum charge",
+    "reason": "Not stated in the supplied tariff leaves.",
+    "cell_ids": [
+     "ny.ced.psc10.sc2.rate1.minimum_charge"
+    ]
+   },
+   {
+    "what": "ratchet clause",
+    "reason": "Not stated in the supplied tariff leaves.",
+    "cell_ids": [
+     "ny.ced.psc10.sc2.rate1.ratchet"
+    ]
+   },
+   {
+    "what": "reactive power charge",
+    "reason": "Reactive power charges are not addressed in the provided tariff leaves for this rate.",
+    "cell_ids": [
+     "ny.ced.psc10.sc2.rate1.reactive"
+    ]
+   }
+  ],
+  "lineage": [
+   "ny.ced.psc10.sc2.rate1.customer_charge",
+   "ny.ced.psc10.sc2.rate1.energy.kwh.m1_2_3_4_5_10_11_12.all.h_all",
+   "ny.ced.psc10.sc2.rate1.energy.kwh.m6_7_8_9.all.h_all"
+  ],
+  "source_file": "config/tariffs/corpus_ced_sc2_rate1.yaml"
+ }
+}

@@ -163,5 +163,53 @@
    "effective": "2025-12-01",
    "rows": 94
   }
- ]
+ ],
+ "by_class": {
+  "sc2": {
+   "kwh": {
+    "rdm": 0.01481,
+    "sdr": -0.002676,
+    "sbc_company_ee": 0.0039
+   },
+   "kw": {},
+   "mfc": 0.004607
+  },
+  "sc8": {
+   "kwh": {
+    "rdm": -0.00726,
+    "sdr": -0.001189
+   },
+   "kw": {
+    "rate1": {
+     "monthly_max_demand_kw": 1.76
+    },
+    "tod": {
+     "tod_demand_kw": 1.76
+    },
+    "standby": {
+     "contract_demand_kw": 1.644019
+    }
+   },
+   "mfc": 0.002256
+  },
+  "sc9": {
+   "kwh": {
+    "rdm": -0.00576,
+    "sdr": 0.000186
+   },
+   "kw": {
+    "rate1": {
+     "monthly_max_demand_kw": 1.61
+    },
+    "tod": {
+     "tod_demand_kw": 1.61
+    },
+    "standby": {
+     "contract_demand_kw": 1.654019
+    }
+   },
+   "mfc": 0.002256
+  },
+  "note": "Standby contract-demand adjustments are the SBC and SDR contract-demand rows; standby schedules carry no SDR $/kWh."
+ }
 }

@@ -30,7 +30,8 @@ const SRC = resolve(process.argv[2] || join(ROOT, 'doc', '2026-10-08-multifamily
 const OUT = join(ROOT, 'templates', 'proforma.xlsx');
 
 const SHEETS = { Inputs: 1, Utility_Rates: 2, Hourly_Operations: 3, Value_Streams: 4, Project_Cash_Flow: 5, Outputs: 6 };
-const STYLE = { kw: 15, usd: 18, rate: 34, note: 2 };
+const STYLE = { kw: 15, usd: 18, rate: 34, note: 2, header: 32, money: 42, text: 5 };
+const TOOL = 'Con Edison Battery Wizard';
 
 // ---------------------------------------------------------------- references
 // A cell or range reference, optionally sheet-qualified; not part of a name or a call.
@@ -112,6 +113,25 @@ function editFormula(xml, ref, from, to) {
   return xml.replace(re, (all, open, attrs, text) => `${open}<f${attrs}>${esc(unesc(text).split(from).join(to))}</f>`);
 }
 
+// A cell's formula text (unescaped), or null.
+function formulaOf(xml, ref) {
+  const m = xml.match(new RegExp(`<c r="${ref}"[^>]*>(?:<f[^>]*>([^<]*)</f>)?`));
+  return m && m[1] !== undefined ? unesc(m[1]) : null;
+}
+
+// Put a formula into an existing cell in a given style.
+function setFormulaStyled(xml, ref, formula, style) {
+  return xml.replace(new RegExp(`<c r="${ref}"([^>]*?)(?:/>|>.*?</c>)`, 's'), () => `<c r="${ref}" s="${style}"><f>${esc(formula)}</f></c>`);
+}
+
+// Append cells to the end of each row `rowCells(n)` returns XML for (or '').
+function appendCells(xml, rowCells) {
+  return xml.replace(/(<row r="(\d+)"[^>]*>)(.*?)(<\/row>)/gs, (m, open, n, body, close) => {
+    const extra = rowCells(+n);
+    return extra ? open + body + extra + close : m;
+  });
+}
+
 function appendRow(xml, row, cells) {
   return xml.replace('</sheetData>', `<row r="${row}">${cells}</row></sheetData>`);
 }
@@ -140,9 +160,27 @@ for (const r of months) {
 }
 vs = setFormula(vs, 'K18', 'SUM(K6:K17)');
 vs = editFormula(vs, 'M18', 'SUM(G18,J18,L18)', 'SUM(G18,J18,K18,L18)');
-vs = appendRow(vs, 32, cellXml('B32', 'Blue cells are filled by the SC 8 Battery Wizard: 15-minute billing peaks (C:D) and demand savings (G) cover every demand window, the SBC demand surcharge and the supply capacity charge, taxes included, so G is not simply E x F.', STYLE.note));
+vs = appendRow(vs, 32, cellXml('B32', `Blue cells are filled by the ${TOOL}: 15-minute billing peaks (C:D) and demand savings (G) cover every demand window, the SBC demand surcharge and the supply capacity charge, taxes included, so G is not simply E x F.`, STYLE.note));
 vs = appendRow(vs, 33, cellXml('B33', 'Program revenue (K): Rider T CSRP / DLRP and Rider AC Term-DLM, from the same dispatch. Reservation payments are spread over the Capability Period months, performance payments land in the event months.', STYLE.note));
-vs = vs.replace(/<dimension ref="[^"]+"/, '<dimension ref="B2:M33"');
+// Value Stack columns after program revenue: L export credits (energy and
+// DRV, summed from the hourly sheet), M capacity (Alternative 3) and LSRV,
+// N the account change (fixed charges, and a rate change to standby);
+// resiliency moves to O and the total to P.
+for (let i = 0; i < 3; i++) vs = insertColumn(vs, 'Value_Streams', 12);
+const hStyle = (vs.match(/<c r="H6" s="(\d+)"/) || [])[1];
+vs = setCells(vs, { L5: 'Export credits: energy + DRV ($)', M5: 'Capacity (Alt 3) + LSRV ($)', N5: 'Account change ($)' });
+for (const r of months) {
+  vs = setFormulaStyled(vs, `L${r}`, formulaOf(vs, `H${r}`).split('Hourly_Operations!$I$6:$I$8765').join('Hourly_Operations!$K$6:$K$8765'), hStyle);
+  vs = setCells(vs, { [`M${r}`]: null, [`N${r}`]: null }, STYLE.usd);
+  vs = editFormula(vs, `P${r}`, `SUM(G${r},J${r},K${r},O${r})`, `SUM(G${r},J${r},K${r},L${r},M${r},N${r},O${r})`);
+}
+vs = setFormula(vs, 'L18', 'IF(Inputs!$C$62,SUM(L6:L17),"")');
+vs = setFormula(vs, 'M18', 'SUM(M6:M17)');
+vs = setFormula(vs, 'N18', 'SUM(N6:N17)');
+vs = editFormula(vs, 'P18', 'SUM(G18,J18,K18,O18)', 'SUM(G18,J18,K18,L18,M18,N18,O18)');
+vs = appendRow(vs, 34, cellXml('B34', 'Value Stack (Rider R A.9(d) with SC 11, Inputs C14): L sums the hourly export credits (Hourly_Operations K); M is Alternative 3 capacity on the kW held through the likely NYISO peak hours, at each month\'s statement rate, plus any LSRV in the event months. Storage gets no environmental component.', STYLE.note));
+vs = appendRow(vs, 35, cellXml('B35', 'N is the account change, taxes included: the change in fixed customer charges (the whole charging account\'s customer charge for a stand-alone battery) and, when the battery moves the building to standby rates, the baseline load\'s energy at the old rate less the new one, since H prices every hour at the new rate. Zero behind the meter on the same rate.', STYLE.note));
+vs = vs.replace(/<dimension ref="[^"]+"/, '<dimension ref="B2:P35"');
 write(sheetPath('Value_Streams'), vs);
 
 // Project_Cash_Flow: program revenue column at F, in both net columns and the payback.
@@ -155,7 +193,17 @@ for (let r = 6; r <= 31; r++) {
 cf = editFormula(cf, 'C37', 'SUM(D7:E7,I7)', 'SUM(D7:F7,I7)');
 cf = editFormula(cf, 'D37', 'SUM(D7:E7,I7)', 'SUM(D7:F7,I7)');
 cf = appendRow(cf, 45, cellXml('B45', 'Program revenue is held at its Year 1 value (program rates are set by the tariff and are not escalated).', STYLE.note));
-cf = cf.replace(/<dimension ref="[^"]+"/, '<dimension ref="B2:N45"');
+// Value Stack credits at G, after program revenue, in both net columns and the payback.
+cf = insertColumn(cf, 'Project_Cash_Flow', 7);
+cf = setCells(cf, { G5: 'Value Stack credits' });
+for (let r = 6; r <= 31; r++) {
+  cf = setFormula(cf, `G${r}`, `IF(AND(Inputs!$C$64,ISNUMBER($B${r})),IF($B${r}=Inputs!$C$68,Inputs!$C$68,Value_Streams!$L$18+Value_Streams!$M$18+Value_Streams!$N$18),"")`);
+  cf = editFormula(cf, `L${r}`, `SUM(C${r}:F${r},J${r}:K${r})`, `SUM(C${r}:G${r},J${r}:K${r})`);
+}
+cf = editFormula(cf, 'C37', 'SUM(D7:F7,J7)', 'SUM(D7:G7,J7)');
+cf = editFormula(cf, 'D37', 'SUM(D7:F7,J7)', 'SUM(D7:G7,J7)');
+cf = appendRow(cf, 46, cellXml('B46', 'Value Stack credits are held at their Year 1 value: the DRV and LSRV rates are fixed for 10 years from the in-service date, then reset; energy and capacity follow the market. The Value Stack term is 25 years.', STYLE.note));
+cf = cf.replace(/<dimension ref="[^"]+"/, '<dimension ref="B2:O46"');
 write(sheetPath('Project_Cash_Flow'), cf);
 
 // Outputs: a program revenue row at 12 (the total below picks it up).
@@ -163,12 +211,24 @@ let out = insertRow(sheet('Outputs'), 'Outputs', 12);
 out = setCells(out, { B12: 'Year 1 program revenue ($)' });
 out = setFormula(out, 'C12', 'IF(ISNUMBER(Value_Streams!K18),Value_Streams!K18,"")');
 out = setFormula(out, 'D12', 'IF(ISNUMBER(C12),C12,"")');
+// and a Value Stack row at 13.
+out = insertRow(out, 'Outputs', 13);
+out = setCells(out, { B13: 'Year 1 Value Stack credits ($)' });
+out = setFormula(out, 'C13', 'IF(ISNUMBER(Value_Streams!L18),Value_Streams!L18+Value_Streams!M18+Value_Streams!N18,"")');
+out = setFormula(out, 'D13', 'IF(ISNUMBER(C13),C13,"")');
+out = out.replace(/Imported dispatch includes charging and efficiency losses\. No exports, optimizer, or SOC \/ cycle validation\./,
+  `Imported dispatch includes charging and efficiency losses. Exports are credited only under the Value Stack (Inputs C14); the dispatch, state of charge and cycles come from the ${TOOL}.`);
 write(sheetPath('Outputs'), out);
 
 // Hourly_Operations: the energy rate becomes an input the app fills.
 let ho = sheet('Hourly_Operations');
 ho = ho.replace(/<c r="H(\d+)"[^>]*?(?:\/>|>.*?<\/c>)/gs, (m, r) => (+r >= 6 && +r <= 8765 ? cellXml(`H${r}`, null, STYLE.rate) : m));
-ho = setCells(ho, { B3: 'Filled by the SC 8 Battery Wizard: D baseline and E dispatch are hourly averages of its 15-minute run (positive = discharge); H is the all-in energy rate for the hour, taxes included.' });
+ho = setCells(ho, { B3: `Filled by the ${TOOL}: D baseline and E dispatch are hourly averages of its 15-minute run (positive = discharge, net of charging, so D - E is the hour's net grid demand); H is the all-in energy rate for the hour, taxes included; L is the Value Stack credit per exported kWh (energy at LBMP x losses, plus the DRV in the call window), blank without exports.` });
+// K: the hour's export credit, L: the credit per exported kWh (filled by the app).
+const kFormula = (r) => `IF(AND(ISNUMBER(F${r}),ISNUMBER(L${r}),F${r}<Inputs!$C$68),-F${r}*L${r}*Inputs!$C$69,"")`;
+ho = appendCells(ho, (n) => (n === 5 ? cellXml('K5', 'Export credit ($/hour)', STYLE.header) + cellXml('L5', 'Export credit rate ($/kWh)', STYLE.header)
+  : n >= 6 && n <= 8765 ? `<c r="K${n}" s="${STYLE.money}"><f>${esc(kFormula(n))}</f></c>` + cellXml(`L${n}`, null, STYLE.rate) : ''));
+ho = ho.replace(/<dimension ref="[^"]+"/, '<dimension ref="B2:L8765"').replace('<col min="4" max="10" width="17.5" customWidth="1"/>', '<col min="4" max="12" width="17.5" customWidth="1"/>');
 write(sheetPath('Hourly_Operations'), ho);
 
 // Inputs: no sample project. Project values, the cells the app fills, the
@@ -179,12 +239,18 @@ const inputCells = (...ranges) => ranges.flatMap((r) => {
   return Array.from({ length: b - a + 1 }, (_, i) => `C${a + i}`);
 });
 const blank = Object.fromEntries(inputCells('C6:C10', 'C16:C25', 'C32:C38', 'C42:C43', 'C48:C52').map((ref) => [ref, null]));
-write(sheetPath('Inputs'), setCells(sheet('Inputs'), { ...blank, C26: 0, C27: 0, C28: 0, C29: 0, C46: 'Flat annual', C47: 0 }));
+let inp = setCells(sheet('Inputs'), { ...blank, C26: 0, C27: 0, C28: 0, C29: 0, C46: 'Flat annual', C47: 0 });
+// Value Stack exports (C14): grid-export hours are then expected, not invalid.
+inp = setCells(inp, { B14: 'Value Stack exports', D14: 'TRUE / FALSE', E14: 'TRUE when exports are credited under the Value Stack (Rider R A.9(d) with SC 11); negative net grid demand is then allowed.', B59: 'Grid-export hours', D59: 'must be 0 unless C14', E59: 'Without Value Stack exports (C14 FALSE) negative net grid demand blocks savings and returns.' });
+inp = setCells(inp, { C14: false }, STYLE.text);
+inp = editFormula(inp, 'C62', 'C59=$C$68,', 'OR(C59=$C$68,C14=TRUE),');
+inp = editFormula(inp, 'C65', 'IF(C59>C68,"INVALID: grid exports"', 'IF(AND(C59>C68,C14<>TRUE),"INVALID: grid exports"');
+write(sheetPath('Inputs'), inp);
 
 // Utility_Rates: say what the filled rates are.
 let ur = sheet('Utility_Rates');
 ur = ur.replace(/<dimension ref="[^"]+"/, '<dimension ref="A1:K57"');
-ur = appendRow(ur, 57, cellXml('B57', 'When filled by the SC 8 Battery Wizard: Demand ($/kW-mo) is the effective baseline rate (all demand charges over the 15-minute billing peak) and every TOU column holds the month\'s average all-in $/kWh, taxes included. They drive the readiness checks and the bill reconciliation; Value_Streams carries the exact savings.', STYLE.note));
+ur = appendRow(ur, 57, cellXml('B57', `When filled by the ${TOOL}: Demand ($/kW-mo) is the effective baseline rate (all demand charges over the 15-minute billing peak) and every TOU column holds the month\'s average all-in $/kWh, taxes included. They drive the readiness checks and the bill reconciliation; Value_Streams carries the exact savings.`, STYLE.note));
 write(sheetPath('Utility_Rates'), ur);
 
 for (const name of Object.keys(SHEETS)) write(sheetPath(name), dropCachedValues(sheet(name)));

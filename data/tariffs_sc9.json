@@ -1,0 +1,1031 @@
+{
+ "corpus_ced_sc9_rate1_ht": {
+  "id": "corpus_ced_sc9_rate1_ht",
+  "name": "Con Edison Rate I - General - Large (High Tension Service)",
+  "service_class": "SC 9",
+  "applicability": "To all Customers other than those billed under Rate II, Rate III, Rate IV, or Rate V.",
+  "rate_basis": "delivery_only",
+  "fixed_charge_per_month": 72.0,
+  "energy": {
+   "units": "usd_per_kwh",
+   "seasons": [
+    {
+     "name": "all_year",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "tou": [
+      {
+       "name": "all_hours",
+       "days": "all",
+       "rate": 0.0143,
+       "lineage": [
+        "ny.ced.psc10.sc9.rate1.ht.energy.kwh.all"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "demand": {
+   "units": "usd_per_kw_month",
+   "charges": [
+    {
+     "name": "summer_all_all_hours",
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "all",
+     "rate": 30.41,
+     "determinant": "monthly_max_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate1.ht.demand.monthly_max_demand_kw.m6_7_8_9.all.h_all"
+     ]
+    },
+    {
+     "name": "other_all_all_hours",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      10,
+      11,
+      12
+     ],
+     "days": "all",
+     "rate": 21.17,
+     "determinant": "monthly_max_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate1.ht.demand.monthly_max_demand_kw.m1_2_3_4_5_10_11_12.all.h_all"
+     ]
+    }
+   ]
+  },
+  "book_vintage": "ny.ced.psc10@2026-08-01",
+  "conversion_notes": null,
+  "unmodelled": [
+   {
+    "what": "reactive power charge",
+    "reason": "Detail defined in General Rule 10.11, not included in this bundle.",
+    "cell_ids": [
+     "ny.ced.psc10.sc9.rate1.ht.reactive"
+    ]
+   }
+  ],
+  "lineage": [
+   "ny.ced.psc10.sc9.rate1.ht.customer_charge",
+   "ny.ced.psc10.sc9.rate1.ht.demand.monthly_max_demand_kw.m1_2_3_4_5_10_11_12.all.h_all",
+   "ny.ced.psc10.sc9.rate1.ht.demand.monthly_max_demand_kw.m6_7_8_9.all.h_all",
+   "ny.ced.psc10.sc9.rate1.ht.energy.kwh.all"
+  ],
+  "source_file": "config/tariffs/corpus_ced_sc9_rate1_ht.yaml"
+ },
+ "corpus_ced_sc9_rate1_lt": {
+  "id": "corpus_ced_sc9_rate1_lt",
+  "name": "Con Edison Rate I - General - Large (Low Tension Service)",
+  "service_class": "SC 9",
+  "applicability": "To all Customers other than those billed under Rate II, Rate III, Rate IV, or Rate V.",
+  "rate_basis": "delivery_only",
+  "fixed_charge_per_month": 72.0,
+  "energy": {
+   "units": "usd_per_kwh",
+   "seasons": [
+    {
+     "name": "all_year",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "tou": [
+      {
+       "name": "all_hours",
+       "days": "all",
+       "rate": 0.0154,
+       "lineage": [
+        "ny.ced.psc10.sc9.rate1.lt.energy.kwh.all"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "demand": {
+   "units": "usd_per_kw_month",
+   "charges": [
+    {
+     "name": "summer_all_all_hours",
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "all",
+     "rate": 44.05,
+     "determinant": "monthly_max_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate1.lt.demand.monthly_max_demand_kw.m6_7_8_9.all.h_all"
+     ]
+    },
+    {
+     "name": "other_all_all_hours",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      10,
+      11,
+      12
+     ],
+     "days": "all",
+     "rate": 34.5,
+     "determinant": "monthly_max_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate1.lt.demand.monthly_max_demand_kw.m1_2_3_4_5_10_11_12.all.h_all"
+     ]
+    }
+   ]
+  },
+  "book_vintage": "ny.ced.psc10@2026-08-01",
+  "conversion_notes": null,
+  "unmodelled": [
+   {
+    "what": "reactive power charge",
+    "reason": "Detail defined in General Rule 10.11, not included in this bundle.",
+    "cell_ids": [
+     "ny.ced.psc10.sc9.rate1.lt.reactive"
+    ]
+   }
+  ],
+  "lineage": [
+   "ny.ced.psc10.sc9.rate1.lt.customer_charge",
+   "ny.ced.psc10.sc9.rate1.lt.demand.monthly_max_demand_kw.m1_2_3_4_5_10_11_12.all.h_all",
+   "ny.ced.psc10.sc9.rate1.lt.demand.monthly_max_demand_kw.m6_7_8_9.all.h_all",
+   "ny.ced.psc10.sc9.rate1.lt.energy.kwh.all"
+  ],
+  "source_file": "config/tariffs/corpus_ced_sc9_rate1_lt.yaml"
+ },
+ "corpus_ced_sc9_rate3_ht": {
+  "id": "corpus_ced_sc9_rate3_ht",
+  "name": "Con Edison Rate III - General - Large - Voluntary Time-of-Day (high tension)",
+  "service_class": "SC 9",
+  "applicability": "To Customers not subject to Rate II, IV, or V who elect to be billed at a time-of-day rate. Rate III is not available to Customers served under General Rule 11 or Special Provision H of this SC unless the Customer takes service under this Service Classification for all of its requirements. Billing under Rate III shall commence in the first billing period following the Company's receipt and acceptance of the Customer's written request to be served under Rate III and the installation of AMI metering equipment. New Customers electing Rate III at the commencement of service will be billed under Rate I until AMI metering equipment is installed. A Customer who elects to transfer from Rate I to Rate III will be ineligible for billing at Rate I for one year subsequent to the commencement of billing at Rate III. Billing for a Customer who elects to transfer from Rate III to Rate I shall commence under Rate I with the first billing period following the Company's receipt and acceptance of the Customer's written request for service under Rate I. Such Customer will be ineligible for billing at Rate III for a period of one and one-half years subsequent to the commencement of billing at Rate I.",
+  "rate_basis": "delivery_only",
+  "fixed_charge_per_month": 72.0,
+  "energy": {
+   "units": "usd_per_kwh",
+   "seasons": [
+    {
+     "name": "all_year",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "tou": [
+      {
+       "name": "all_hours",
+       "days": "all",
+       "rate": 0.0079,
+       "lineage": [
+        "ny.ced.psc10.sc9.rate3.energy.kwh.all"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "demand": {
+   "units": "usd_per_kw_month",
+   "charges": [
+    {
+     "name": "summer_weekdays_h8_18",
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      18
+     ],
+     "rate": 12.75,
+     "determinant": "tod_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate3.demand.tod_demand_kw.m6_7_8_9.weekdays.h8_18"
+     ]
+    },
+    {
+     "name": "summer_weekdays_h8_22",
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "rate": 28.64,
+     "determinant": "tod_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate3.demand.tod_demand_kw.m6_7_8_9.weekdays.h8_22"
+     ]
+    },
+    {
+     "name": "other_weekdays_h8_22",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      10,
+      11,
+      12
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "rate": 18.15,
+     "determinant": "tod_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate3.demand.tod_demand_kw.m1_2_3_4_5_10_11_12.weekdays.h8_22"
+     ]
+    }
+   ]
+  },
+  "book_vintage": "ny.ced.psc10@2026-08-01",
+  "conversion_notes": [
+   "2 row(s) for other voltage levels excluded from this variant"
+  ],
+  "unmodelled": [
+   {
+    "what": "reactive power charge",
+    "reason": "Detail defined in General Rule 10.11, not included in this bundle.",
+    "cell_ids": [
+     "ny.ced.psc10.sc9.rate3.reactive"
+    ]
+   }
+  ],
+  "lineage": [
+   "ny.ced.psc10.sc9.rate3.customer_charge",
+   "ny.ced.psc10.sc9.rate3.demand.tod_demand_kw.m1_2_3_4_5_10_11_12.weekdays.h8_22",
+   "ny.ced.psc10.sc9.rate3.demand.tod_demand_kw.m6_7_8_9.weekdays.h8_18",
+   "ny.ced.psc10.sc9.rate3.demand.tod_demand_kw.m6_7_8_9.weekdays.h8_22",
+   "ny.ced.psc10.sc9.rate3.energy.kwh.all"
+  ],
+  "source_file": "config/tariffs/corpus_ced_sc9_rate3_ht.yaml"
+ },
+ "corpus_ced_sc9_rate3_lt": {
+  "id": "corpus_ced_sc9_rate3_lt",
+  "name": "Con Edison Rate III - General - Large - Voluntary Time-of-Day (low tension)",
+  "service_class": "SC 9",
+  "applicability": "To Customers not subject to Rate II, IV, or V who elect to be billed at a time-of-day rate. Rate III is not available to Customers served under General Rule 11 or Special Provision H of this SC unless the Customer takes service under this Service Classification for all of its requirements. Billing under Rate III shall commence in the first billing period following the Company's receipt and acceptance of the Customer's written request to be served under Rate III and the installation of AMI metering equipment. New Customers electing Rate III at the commencement of service will be billed under Rate I until AMI metering equipment is installed. A Customer who elects to transfer from Rate I to Rate III will be ineligible for billing at Rate I for one year subsequent to the commencement of billing at Rate III. Billing for a Customer who elects to transfer from Rate III to Rate I shall commence under Rate I with the first billing period following the Company's receipt and acceptance of the Customer's written request for service under Rate I. Such Customer will be ineligible for billing at Rate III for a period of one and one-half years subsequent to the commencement of billing at Rate I.",
+  "rate_basis": "delivery_only",
+  "fixed_charge_per_month": 72.0,
+  "energy": {
+   "units": "usd_per_kwh",
+   "seasons": [
+    {
+     "name": "all_year",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "tou": [
+      {
+       "name": "all_hours",
+       "days": "all",
+       "rate": 0.0079,
+       "lineage": [
+        "ny.ced.psc10.sc9.rate3.energy.kwh.all"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "demand": {
+   "units": "usd_per_kw_month",
+   "charges": [
+    {
+     "name": "summer_weekdays_h8_18",
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      18
+     ],
+     "rate": 12.75,
+     "determinant": "tod_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate3.demand.tod_demand_kw.m6_7_8_9.weekdays.h8_18"
+     ]
+    },
+    {
+     "name": "summer_weekdays_h8_22",
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "rate": 28.64,
+     "determinant": "tod_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate3.demand.tod_demand_kw.m6_7_8_9.weekdays.h8_22"
+     ]
+    },
+    {
+     "name": "summer_all_all_hours",
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "all",
+     "rate": 27.33,
+     "determinant": "monthly_max_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate3.demand.tod_demand_kw.m6_7_8_9.all.h_all"
+     ]
+    },
+    {
+     "name": "other_weekdays_h8_22",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      10,
+      11,
+      12
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "rate": 18.15,
+     "determinant": "tod_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate3.demand.tod_demand_kw.m1_2_3_4_5_10_11_12.weekdays.h8_22"
+     ]
+    },
+    {
+     "name": "other_all_all_hours",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      10,
+      11,
+      12
+     ],
+     "days": "all",
+     "rate": 7.04,
+     "determinant": "monthly_max_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate3.demand.tod_demand_kw.m1_2_3_4_5_10_11_12.all.h_all"
+     ]
+    }
+   ]
+  },
+  "book_vintage": "ny.ced.psc10@2026-08-01",
+  "conversion_notes": [
+   "demand row ny.ced.psc10.sc9.rate3.demand.tod_demand_kw.m6_7_8_9.all.h_all: tod_demand_kw with no hour window compiled as monthly_max_demand_kw",
+   "demand row ny.ced.psc10.sc9.rate3.demand.tod_demand_kw.m1_2_3_4_5_10_11_12.all.h_all: tod_demand_kw with no hour window compiled as monthly_max_demand_kw"
+  ],
+  "unmodelled": [
+   {
+    "what": "reactive power charge",
+    "reason": "Detail defined in General Rule 10.11, not included in this bundle.",
+    "cell_ids": [
+     "ny.ced.psc10.sc9.rate3.reactive"
+    ]
+   }
+  ],
+  "lineage": [
+   "ny.ced.psc10.sc9.rate3.customer_charge",
+   "ny.ced.psc10.sc9.rate3.demand.tod_demand_kw.m1_2_3_4_5_10_11_12.all.h_all",
+   "ny.ced.psc10.sc9.rate3.demand.tod_demand_kw.m1_2_3_4_5_10_11_12.weekdays.h8_22",
+   "ny.ced.psc10.sc9.rate3.demand.tod_demand_kw.m6_7_8_9.all.h_all",
+   "ny.ced.psc10.sc9.rate3.demand.tod_demand_kw.m6_7_8_9.weekdays.h8_18",
+   "ny.ced.psc10.sc9.rate3.demand.tod_demand_kw.m6_7_8_9.weekdays.h8_22",
+   "ny.ced.psc10.sc9.rate3.energy.kwh.all"
+  ],
+  "source_file": "config/tariffs/corpus_ced_sc9_rate3_lt.yaml"
+ },
+ "corpus_ced_sc9_rate4_lt": {
+  "id": "corpus_ced_sc9_rate4_lt",
+  "name": "Rate IV - General Large Standby Service, Low Tension Service (all Customers except Station Use by Wholesale Generators)",
+  "service_class": "SC 9",
+  "standby": true,
+  "applicability": "Applicable to all Customers, except for Station Use by Wholesale Generators:",
+  "rate_basis": "delivery_only",
+  "fixed_charge_per_month": 72.0,
+  "energy": {
+   "units": "usd_per_kwh",
+   "seasons": [
+    {
+     "name": "all_year",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "tou": [
+      {
+       "name": "all_hours",
+       "days": "all",
+       "rate": 0.0
+      }
+     ]
+    }
+   ]
+  },
+  "demand": {
+   "units": "usd_per_kw_month or usd_per_kw_day (period: day)",
+   "charges": [
+    {
+     "name": "contract_demand",
+     "rate": 7.94,
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "days": "all",
+     "period": "year",
+     "determinant": "contract_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate4.lt.leaf452_2.demand.contract_demand_kw.all"
+     ]
+    },
+    {
+     "name": "as_used_summer_8_18",
+     "rate": 0.705,
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      18
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate4.lt.leaf452_2.demand.daily_as_used_demand_kw.m6_7_8_9.weekdays.h8_18"
+     ]
+    },
+    {
+     "name": "as_used_summer_8_22",
+     "rate": 2.3094,
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate4.lt.leaf452_2.demand.daily_as_used_demand_kw.m6_7_8_9.weekdays.h8_22"
+     ]
+    },
+    {
+     "name": "as_used_other_8_22",
+     "rate": 1.3632,
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      10,
+      11,
+      12
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate4.lt.leaf452_2.demand.daily_as_used_demand_kw.m1_2_3_4_5_10_11_12.weekdays.h8_22"
+     ]
+    }
+   ]
+  },
+  "book_vintage": null,
+  "lineage": [
+   "ced-psc10-leaf-452.2-r4"
+  ],
+  "source_file": "config/tariff_db/ny/ced/books/ny.ced.psc10_2026-08-01.json#ny.ced.psc10.sc9.rate4.lt.leaf452_2"
+ },
+ "corpus_ced_sc9_rate4_ht": {
+  "id": "corpus_ced_sc9_rate4_ht",
+  "name": "Rate IV - General Large Standby Service, High Tension Service (all Customers except Station Use by Wholesale Generators)",
+  "service_class": "SC 9",
+  "standby": true,
+  "applicability": "Applicable to all Customers, except for Station Use by Wholesale Generators:",
+  "rate_basis": "delivery_only",
+  "fixed_charge_per_month": 72.0,
+  "energy": {
+   "units": "usd_per_kwh",
+   "seasons": [
+    {
+     "name": "all_year",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "tou": [
+      {
+       "name": "all_hours",
+       "days": "all",
+       "rate": 0.0
+      }
+     ]
+    }
+   ]
+  },
+  "demand": {
+   "units": "usd_per_kw_month or usd_per_kw_day (period: day)",
+   "charges": [
+    {
+     "name": "contract_demand",
+     "rate": 0.65,
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "days": "all",
+     "period": "year",
+     "determinant": "contract_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate4.ht.leaf452_2.demand.contract_demand_kw.all"
+     ]
+    },
+    {
+     "name": "as_used_summer_8_18",
+     "rate": 0.702,
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      18
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate4.ht.leaf452_2.demand.daily_as_used_demand_kw.m6_7_8_9.weekdays.h8_18"
+     ]
+    },
+    {
+     "name": "as_used_summer_8_22",
+     "rate": 1.1747,
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate4.ht.leaf452_2.demand.daily_as_used_demand_kw.m6_7_8_9.weekdays.h8_22"
+     ]
+    },
+    {
+     "name": "as_used_other_8_22",
+     "rate": 1.0592,
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      10,
+      11,
+      12
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate4.ht.leaf452_2.demand.daily_as_used_demand_kw.m1_2_3_4_5_10_11_12.weekdays.h8_22"
+     ]
+    }
+   ]
+  },
+  "book_vintage": null,
+  "lineage": [
+   "ced-psc10-leaf-452.2-r4"
+  ],
+  "source_file": "config/tariff_db/ny/ced/books/ny.ced.psc10_2026-08-01.json#ny.ced.psc10.sc9.rate4.ht.leaf452_2"
+ },
+ "corpus_ced_sc9_rate5_lt": {
+  "id": "corpus_ced_sc9_rate5_lt",
+  "name": "SC9 Rate V Standby (Large) - All Other Customers - Low Tension Service",
+  "service_class": "SC 9",
+  "standby": true,
+  "applicability": "Applicable to all Customers, except for Station Use by Wholesale Generators - Low Tension Service.",
+  "rate_basis": "delivery_only",
+  "fixed_charge_per_month": 510.0,
+  "energy": {
+   "units": "usd_per_kwh",
+   "seasons": [
+    {
+     "name": "all_year",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "tou": [
+      {
+       "name": "all_hours",
+       "days": "all",
+       "rate": 0.0
+      }
+     ]
+    }
+   ]
+  },
+  "demand": {
+   "units": "usd_per_kw_month or usd_per_kw_day (period: day)",
+   "charges": [
+    {
+     "name": "contract_demand",
+     "rate": 2.69,
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "days": "all",
+     "period": "year",
+     "determinant": "contract_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate5.lt.demand.contract_demand_kw.all"
+     ]
+    },
+    {
+     "name": "as_used_summer_8_18",
+     "rate": 0.7385,
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      18
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate5.lt.demand.daily_as_used_demand_kw.m6_7_8_9.weekdays.h8_18"
+     ]
+    },
+    {
+     "name": "as_used_summer_8_22",
+     "rate": 2.3661,
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate5.lt.demand.daily_as_used_demand_kw.m6_7_8_9.weekdays.h8_22"
+     ]
+    },
+    {
+     "name": "as_used_other_8_22",
+     "rate": 1.4657,
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      10,
+      11,
+      12
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate5.lt.demand.daily_as_used_demand_kw.m1_2_3_4_5_10_11_12.weekdays.h8_22"
+     ]
+    }
+   ]
+  },
+  "book_vintage": null,
+  "lineage": [
+   "ced-psc10-leaf-453.2-r4"
+  ],
+  "source_file": "config/tariff_db/ny/ced/books/ny.ced.psc10_2026-08-01.json#ny.ced.psc10.sc9.rate5.lt"
+ },
+ "corpus_ced_sc9_rate5_ht": {
+  "id": "corpus_ced_sc9_rate5_ht",
+  "name": "SC9 Rate V Standby (Large) - All Other Customers - High Tension Service below 138 kV",
+  "service_class": "SC 9",
+  "standby": true,
+  "applicability": "Applicable to all Customers, except for Station Use by Wholesale Generators - High Tension Service below 138 kV.",
+  "rate_basis": "delivery_only",
+  "fixed_charge_per_month": 510.0,
+  "energy": {
+   "units": "usd_per_kwh",
+   "seasons": [
+    {
+     "name": "all_year",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "tou": [
+      {
+       "name": "all_hours",
+       "days": "all",
+       "rate": 0.0
+      }
+     ]
+    }
+   ]
+  },
+  "demand": {
+   "units": "usd_per_kw_month or usd_per_kw_day (period: day)",
+   "charges": [
+    {
+     "name": "contract_demand",
+     "rate": 1.22,
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "days": "all",
+     "period": "year",
+     "determinant": "contract_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate5.ht_below138.demand.contract_demand_kw.all"
+     ]
+    },
+    {
+     "name": "as_used_summer_8_18",
+     "rate": 0.7411,
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      18
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate5.ht_below138.demand.daily_as_used_demand_kw.m6_7_8_9.weekdays.h8_18"
+     ]
+    },
+    {
+     "name": "as_used_summer_8_22",
+     "rate": 1.2506,
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate5.ht_below138.demand.daily_as_used_demand_kw.m6_7_8_9.weekdays.h8_22"
+     ]
+    },
+    {
+     "name": "as_used_other_8_22",
+     "rate": 1.1738,
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      10,
+      11,
+      12
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate5.ht_below138.demand.daily_as_used_demand_kw.m1_2_3_4_5_10_11_12.weekdays.h8_22"
+     ]
+    }
+   ]
+  },
+  "book_vintage": null,
+  "lineage": [
+   "ced-psc10-leaf-453.2-r4"
+  ],
+  "source_file": "config/tariff_db/ny/ced/books/ny.ced.psc10_2026-08-01.json#ny.ced.psc10.sc9.rate5.ht_below138"
+ }
+}

@@ -156,7 +156,7 @@ function collectVintages(value, acc) {
 
 function sanitizeDataFile(name, doc) {
   doc = sanitize(doc);
-  if (name === 'tariffs_sc8.json') {
+  if (/^tariffs_sc\d+\.json$/.test(name)) {
     doc = Object.fromEntries(Object.entries(doc).map(([k, t]) => {
       const id = k.replace(/^corpus_/, '');
       return [id, { ...t, id }];

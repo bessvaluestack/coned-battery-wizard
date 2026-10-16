@@ -1,7 +1,7 @@
 // Module worker: builds the LP text off the main thread and solves it with
 // the vendored HiGHS WebAssembly build (vendor/highs, MIT, highs-js 1.15.3).
 import loadHighs from '../vendor/highs/highs.mjs';
-import { solveWithCycleCap } from './lp.js';
+import { solveScenario } from './lp.js';
 
 let highsPromise = null;
 function getHighs() {
@@ -17,10 +17,10 @@ self.onmessage = async (ev) => {
     const t0 = performance.now();
     const highs = await getHighs();
     const t1 = performance.now();
-    const res = solveWithCycleCap(highs, inputs);
+    const res = solveScenario(highs, inputs);
     res.timing.loadMs = t1 - t0;
     res.timing.totalMs = performance.now() - t0;
-    self.postMessage({ id, ok: true, result: res }, [res.imp.buffer, res.ch.buffer, res.dis.buffer, res.soc.buffer]);
+    self.postMessage({ id, ok: true, result: res }, [res.imp.buffer, res.exp.buffer, res.ch.buffer, res.dis.buffer, res.soc.buffer]);
   } catch (e) {
     self.postMessage({ id, ok: false, error: String(e && e.message || e) });
   }

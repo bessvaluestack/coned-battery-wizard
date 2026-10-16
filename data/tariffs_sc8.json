@@ -770,5 +770,549 @@
    "ny.ced.psc10.sc8.rate3.lt.energy.kwh.m_all.all.h_all"
   ],
   "source_file": "config/tariffs/corpus_ced_sc8_rate3_lt.yaml"
+ },
+ "corpus_ced_sc8_rate4_lt": {
+  "id": "corpus_ced_sc8_rate4_lt",
+  "name": "Rate IV - Multiple Dwellings - Redistribution - Standby Service - Low Tension Service - applicable to all other Customers",
+  "service_class": "SC 8",
+  "standby": true,
+  "applicability": "Delivery Charges, applicable to all other Customers",
+  "rate_basis": "delivery_only",
+  "fixed_charge_per_month": 59.0,
+  "energy": {
+   "units": "usd_per_kwh",
+   "seasons": [
+    {
+     "name": "all_year",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "tou": [
+      {
+       "name": "all_hours",
+       "days": "all",
+       "rate": 0.0
+      }
+     ]
+    }
+   ]
+  },
+  "demand": {
+   "units": "usd_per_kw_month or usd_per_kw_day (period: day)",
+   "charges": [
+    {
+     "name": "contract_demand",
+     "rate": 4.97,
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "days": "all",
+     "period": "year",
+     "determinant": "contract_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc8.rate4.lt.demand.contract_demand_kw.m_all.all.h_all"
+     ]
+    },
+    {
+     "name": "as_used_summer_8_18",
+     "rate": 1.0061,
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      18
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc8.rate4.lt.demand.daily_as_used_demand_kw.m6_7_8_9.weekdays.h8_18"
+     ]
+    },
+    {
+     "name": "as_used_summer_8_22",
+     "rate": 3.2768,
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc8.rate4.lt.demand.daily_as_used_demand_kw.m6_7_8_9.weekdays.h8_22"
+     ]
+    },
+    {
+     "name": "as_used_other_8_22",
+     "rate": 1.7368,
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      10,
+      11,
+      12
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc8.rate4.lt.demand.daily_as_used_demand_kw.m1_2_3_4_5_10_11_12.weekdays.h8_22"
+     ]
+    }
+   ]
+  },
+  "book_vintage": null,
+  "lineage": [
+   "ced-psc10-leaf-438.1-r3"
+  ],
+  "source_file": "config/tariff_db/ny/ced/books/ny.ced.psc10_2026-08-01.json#ny.ced.psc10.sc8.rate4.lt"
+ },
+ "corpus_ced_sc8_rate4_ht": {
+  "id": "corpus_ced_sc8_rate4_ht",
+  "name": "Rate IV - Multiple Dwellings - Redistribution - Standby Service - High Tension Service - applicable to all other Customers",
+  "service_class": "SC 8",
+  "standby": true,
+  "applicability": "Delivery Charges, applicable to all other Customers",
+  "rate_basis": "delivery_only",
+  "fixed_charge_per_month": 59.0,
+  "energy": {
+   "units": "usd_per_kwh",
+   "seasons": [
+    {
+     "name": "all_year",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "tou": [
+      {
+       "name": "all_hours",
+       "days": "all",
+       "rate": 0.0
+      }
+     ]
+    }
+   ]
+  },
+  "demand": {
+   "units": "usd_per_kw_month or usd_per_kw_day (period: day)",
+   "charges": [
+    {
+     "name": "contract_demand",
+     "rate": 3.12,
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "days": "all",
+     "period": "year",
+     "determinant": "contract_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc8.rate4.ht.demand.contract_demand_kw.m_all.all.h_all"
+     ]
+    },
+    {
+     "name": "as_used_summer_8_18",
+     "rate": 1.0061,
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      18
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc8.rate4.ht.demand.daily_as_used_demand_kw.m6_7_8_9.weekdays.h8_18"
+     ]
+    },
+    {
+     "name": "as_used_summer_8_22",
+     "rate": 1.7538,
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc8.rate4.ht.demand.daily_as_used_demand_kw.m6_7_8_9.weekdays.h8_22"
+     ]
+    },
+    {
+     "name": "as_used_other_8_22",
+     "rate": 1.4395,
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      10,
+      11,
+      12
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc8.rate4.ht.demand.daily_as_used_demand_kw.m1_2_3_4_5_10_11_12.weekdays.h8_22"
+     ]
+    }
+   ]
+  },
+  "book_vintage": null,
+  "lineage": [
+   "ced-psc10-leaf-438.1-r3"
+  ],
+  "source_file": "config/tariff_db/ny/ced/books/ny.ced.psc10_2026-08-01.json#ny.ced.psc10.sc8.rate4.ht"
+ },
+ "corpus_ced_sc8_rate5_lt": {
+  "id": "corpus_ced_sc8_rate5_lt",
+  "name": "Rate V - Multiple Dwellings - Redistribution - Standby Service (Large) - Low Tension Service - applicable to all other Customers",
+  "service_class": "SC 8",
+  "standby": true,
+  "applicability": "Delivery Charges, applicable to all other Customers",
+  "rate_basis": "delivery_only",
+  "fixed_charge_per_month": 510.0,
+  "energy": {
+   "units": "usd_per_kwh",
+   "seasons": [
+    {
+     "name": "all_year",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "tou": [
+      {
+       "name": "all_hours",
+       "days": "all",
+       "rate": 0.0
+      }
+     ]
+    }
+   ]
+  },
+  "demand": {
+   "units": "usd_per_kw_month or usd_per_kw_day (period: day)",
+   "charges": [
+    {
+     "name": "contract_demand",
+     "rate": 3.43,
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "days": "all",
+     "period": "year",
+     "determinant": "contract_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc8.rate5.lt.demand.contract_demand_kw.m_all.all.h_all"
+     ]
+    },
+    {
+     "name": "as_used_summer_8_18",
+     "rate": 0.953,
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      18
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc8.rate5.lt.demand.daily_as_used_demand_kw.m6_7_8_9.weekdays.h8_18"
+     ]
+    },
+    {
+     "name": "as_used_summer_8_22",
+     "rate": 3.1208,
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc8.rate5.lt.demand.daily_as_used_demand_kw.m6_7_8_9.weekdays.h8_22"
+     ]
+    },
+    {
+     "name": "as_used_other_8_22",
+     "rate": 1.6978,
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      10,
+      11,
+      12
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc8.rate5.lt.demand.daily_as_used_demand_kw.m1_2_3_4_5_10_11_12.weekdays.h8_22"
+     ]
+    }
+   ]
+  },
+  "book_vintage": null,
+  "lineage": [
+   "ced-psc10-leaf-439.1-r3"
+  ],
+  "source_file": "config/tariff_db/ny/ced/books/ny.ced.psc10_2026-08-01.json#ny.ced.psc10.sc8.rate5.lt"
+ },
+ "corpus_ced_sc8_rate5_ht": {
+  "id": "corpus_ced_sc8_rate5_ht",
+  "name": "Rate V - Multiple Dwellings - Redistribution - Standby Service (Large) - High Tension Service below 138 kV - applicable to all other Customers",
+  "service_class": "SC 8",
+  "standby": true,
+  "applicability": "Delivery Charges, applicable to all other Customers",
+  "rate_basis": "delivery_only",
+  "fixed_charge_per_month": 510.0,
+  "energy": {
+   "units": "usd_per_kwh",
+   "seasons": [
+    {
+     "name": "all_year",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "tou": [
+      {
+       "name": "all_hours",
+       "days": "all",
+       "rate": 0.0
+      }
+     ]
+    }
+   ]
+  },
+  "demand": {
+   "units": "usd_per_kw_month or usd_per_kw_day (period: day)",
+   "charges": [
+    {
+     "name": "contract_demand",
+     "rate": 2.3,
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "days": "all",
+     "period": "year",
+     "determinant": "contract_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc8.rate5.ht_below138.demand.contract_demand_kw.m_all.all.h_all"
+     ]
+    },
+    {
+     "name": "as_used_summer_8_18",
+     "rate": 0.953,
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      18
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc8.rate5.ht_below138.demand.daily_as_used_demand_kw.m6_7_8_9.weekdays.h8_18"
+     ]
+    },
+    {
+     "name": "as_used_summer_8_22",
+     "rate": 1.6762,
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc8.rate5.ht_below138.demand.daily_as_used_demand_kw.m6_7_8_9.weekdays.h8_22"
+     ]
+    },
+    {
+     "name": "as_used_other_8_22",
+     "rate": 1.4073,
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      10,
+      11,
+      12
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "period": "day",
+     "determinant": "daily_as_used_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc8.rate5.ht_below138.demand.daily_as_used_demand_kw.m1_2_3_4_5_10_11_12.weekdays.h8_22"
+     ]
+    }
+   ]
+  },
+  "book_vintage": null,
+  "lineage": [
+   "ced-psc10-leaf-439.1-r3"
+  ],
+  "source_file": "config/tariff_db/ny/ced/books/ny.ced.psc10_2026-08-01.json#ny.ced.psc10.sc8.rate5.ht_below138"
  }
 }

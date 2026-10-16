@@ -1,0 +1,558 @@
+{
+ "book_vintage": "ny.ced.psc10@2026-08-01",
+ "status": "candidate",
+ "loss_factor": 1.061,
+ "loss_factor_note": "General Rule 25.1, Factor of Adjustment for Losses (1.061 for 5.8% losses, effective 02/01/2026); applies to the energy component (Rider R H.4.a) and the Alternative 3 credit (H.4.b). Earlier statements may have used 1.071 (Rev. 9).",
+ "region_zones": {
+  "nyc": [
+   "J"
+  ],
+  "westchester": [
+   "H",
+   "I"
+  ]
+ },
+ "energy": {
+  "basis": "NYISO day-ahead hourly zonal LBMP x loss factor, on each hour's net injection"
+ },
+ "alt3": {
+  "unit": "USD/kW-month",
+  "by_month": {
+   "1": {
+    "nyc": 7.02,
+    "westchester": 4.94,
+    "statement": 100,
+    "effective": "2026-01-01"
+   },
+   "2": {
+    "nyc": 6.87,
+    "westchester": 4.8,
+    "statement": 101,
+    "effective": "2026-02-01"
+   },
+   "3": {
+    "nyc": 5.99,
+    "westchester": 2.41,
+    "statement": 102,
+    "effective": "2026-03-01"
+   },
+   "4": {
+    "nyc": 5.97,
+    "westchester": 2.23,
+    "statement": 103,
+    "effective": "2026-04-01"
+   },
+   "5": {
+    "nyc": 28.94,
+    "westchester": 8.24,
+    "statement": 104,
+    "effective": "2026-05-01"
+   },
+   "6": {
+    "nyc": 27.58,
+    "westchester": 9.14,
+    "statement": 105,
+    "effective": "2026-06-01"
+   },
+   "7": {
+    "nyc": 13.73,
+    "westchester": 5.85,
+    "statement": 106,
+    "effective": "2026-07-01"
+   },
+   "8": {
+    "nyc": 12.42,
+    "westchester": 5.59,
+    "statement": 107,
+    "effective": "2026-08-01"
+   },
+   "9": {
+    "nyc": 12.45,
+    "westchester": 5.4,
+    "statement": 108,
+    "effective": "2026-09-01"
+   },
+   "10": {
+    "nyc": 12.8,
+    "westchester": 6.71,
+    "statement": 109,
+    "effective": "2026-10-01"
+   },
+   "11": {
+    "nyc": 5.82,
+    "westchester": 2.39,
+    "statement": 98,
+    "effective": "2025-11-01"
+   },
+   "12": {
+    "nyc": 6.73,
+    "westchester": 4.11,
+    "statement": 99,
+    "effective": "2025-12-01"
+   }
+  },
+  "peak_hour": "the New York Control Area peak hour of the previous calendar year, on a non-holiday weekday in July or August"
+ },
+ "drv": {
+  "rate": 0.8536,
+  "unit": "USD/kWh",
+  "date_range": [
+   "06-24",
+   "09-15"
+  ],
+  "days": "weekdays",
+  "exclude_holidays": true,
+  "call_windows": [
+   [
+    11,
+    15
+   ],
+   [
+    14,
+    18
+   ],
+   [
+    16,
+    20
+   ],
+   [
+    19,
+    23
+   ]
+  ],
+  "window_by_network": {
+   "BATTERY PARK CITY": [
+    11,
+    15
+   ],
+   "BAY RIDGE": [
+    14,
+    18
+   ],
+   "BEEKMAN": [
+    11,
+    15
+   ],
+   "BORDEN": [
+    14,
+    18
+   ],
+   "BOROUGH HALL": [
+    14,
+    18
+   ],
+   "BOWLING GREEN": [
+    11,
+    15
+   ],
+   "BRIGHTON BEACH": [
+    16,
+    20
+   ],
+   "BUCHANAN": [
+    16,
+    20
+   ],
+   "CANAL": [
+    14,
+    18
+   ],
+   "CEDAR STREET": [
+    16,
+    20
+   ],
+   "CENTRAL BRONX": [
+    19,
+    23
+   ],
+   "CENTRAL PARK": [
+    16,
+    20
+   ],
+   "CHELSEA": [
+    14,
+    18
+   ],
+   "CITY HALL": [
+    11,
+    15
+   ],
+   "COLUMBUS CIRCLE": [
+    14,
+    18
+   ],
+   "COOPER SQUARE": [
+    16,
+    20
+   ],
+   "CORTLANDT": [
+    11,
+    15
+   ],
+   "CROWN HEIGHTS": [
+    16,
+    20
+   ],
+   "ELMSFORD No. 2": [
+    16,
+    20
+   ],
+   "EMPIRE": [
+    11,
+    15
+   ],
+   "FASHION": [
+    14,
+    18
+   ],
+   "FLATBUSH": [
+    16,
+    20
+   ],
+   "FLUSHING": [
+    16,
+    20
+   ],
+   "FORDHAM": [
+    16,
+    20
+   ],
+   "FOX HILLS": [
+    16,
+    20
+   ],
+   "FREEDOM": [
+    11,
+    15
+   ],
+   "FRESH KILLS": [
+    19,
+    23
+   ],
+   "FULTON": [
+    11,
+    15
+   ],
+   "GRAND CENTRAL": [
+    11,
+    15
+   ],
+   "GRANITE HILL": [
+    16,
+    20
+   ],
+   "GRASSLANDS": [
+    16,
+    20
+   ],
+   "GREELEY SQUARE": [
+    11,
+    15
+   ],
+   "GREENWICH": [
+    14,
+    18
+   ],
+   "HARLEM": [
+    16,
+    20
+   ],
+   "HARRISON": [
+    16,
+    20
+   ],
+   "HERALD SQUARE": [
+    14,
+    18
+   ],
+   "HUDSON": [
+    11,
+    15
+   ],
+   "HUNTER": [
+    14,
+    18
+   ],
+   "JACKSON HEIGHTS": [
+    16,
+    20
+   ],
+   "JAMAICA": [
+    19,
+    23
+   ],
+   "KIPS BAY": [
+    14,
+    18
+   ],
+   "LENOX HILL": [
+    14,
+    18
+   ],
+   "LINCOLN SQUARE": [
+    11,
+    15
+   ],
+   "LONG ISLAND CITY": [
+    16,
+    20
+   ],
+   "MADISON SQUARE": [
+    11,
+    15
+   ],
+   "MASPETH": [
+    16,
+    20
+   ],
+   "MIDTOWN WEST": [
+    11,
+    15
+   ],
+   "MILLWOOD WEST": [
+    16,
+    20
+   ],
+   "MOHANSIC": [
+    19,
+    23
+   ],
+   "MORGAN": [
+    11,
+    15
+   ],
+   "NORTHEAST BRONX": [
+    16,
+    20
+   ],
+   "OCEAN PARKWAY": [
+    16,
+    20
+   ],
+   "OSSINING WEST": [
+    19,
+    23
+   ],
+   "PARK PLACE": [
+    11,
+    15
+   ],
+   "PARK SLOPE": [
+    14,
+    18
+   ],
+   "PENNSYLVANIA": [
+    11,
+    15
+   ],
+   "PLAZA": [
+    11,
+    15
+   ],
+   "PLEASANTVILLE": [
+    16,
+    20
+   ],
+   "PROSPECT PARK": [
+    16,
+    20
+   ],
+   "REGO PARK": [
+    16,
+    20
+   ],
+   "RICHMOND HILL": [
+    16,
+    20
+   ],
+   "RIDGEWOOD": [
+    16,
+    20
+   ],
+   "RIVERDALE": [
+    16,
+    20
+   ],
+   "ROCKEFELLER CENTER": [
+    11,
+    15
+   ],
+   "ROCKVIEW": [
+    16,
+    20
+   ],
+   "ROOSEVELT": [
+    11,
+    15
+   ],
+   "SHEEPSHEAD BAY": [
+    16,
+    20
+   ],
+   "SHERIDAN SQUARE": [
+    14,
+    18
+   ],
+   "SOUTHEAST BRONX": [
+    16,
+    20
+   ],
+   "SUNNYSIDE": [
+    16,
+    20
+   ],
+   "SUTTON": [
+    11,
+    15
+   ],
+   "TIMES SQUARE": [
+    14,
+    18
+   ],
+   "TRIBORO": [
+    16,
+    20
+   ],
+   "TURTLE BAY": [
+    14,
+    18
+   ],
+   "WAINWRIGHT": [
+    19,
+    23
+   ],
+   "WASHINGTON HEIGHTS": [
+    16,
+    20
+   ],
+   "WASHINGTON STREET": [
+    16,
+    20
+   ],
+   "WEST BRONX": [
+    16,
+    20
+   ],
+   "WHITE PLAINS": [
+    16,
+    20
+   ],
+   "WILLIAMSBURG": [
+    16,
+    20
+   ],
+   "WILLOWBROOK": [
+    19,
+    23
+   ],
+   "WOODROW": [
+    19,
+    23
+   ],
+   "YORKVILLE": [
+    16,
+    20
+   ]
+  },
+  "fixed_years": 10
+ },
+ "lsrv": {
+  "rate": 140.76,
+  "unit": "USD/kW-year",
+  "min_events": 10,
+  "max_event_hours": 4,
+  "date_range": [
+   "06-24",
+   "09-15"
+  ],
+  "days": "weekdays",
+  "mw_remaining": {
+   "Plymouth Sub-transmission": 0.0,
+   "Water St. Sub-transmission": 0.0,
+   "Glendale, Newtown Sub-transmission: Borden Network / Sunnyside Network / Maspeth Network (single row)": 0.0,
+   "E. 179th St. Area Station": 0.0,
+   "Parkchester No. 1 Area Station": 0.0,
+   "Parkchester No. 2 Area Station": 0.0,
+   "W. 42nd St. No. 1 Area Station": 0.0,
+   "W. 65th St. No. 1 Area Station": 1.5,
+   "Wainwright Area Station": 0.0,
+   "Willowbrook Area Station": 0.0,
+   "Millwood Area Station": 0.0,
+   "Northeast Bronx Network": 0.0,
+   "Yorkville Network": 3.52,
+   "Crown Heights": 0.0,
+   "Ridgewood": 0.0,
+   "Richmond Hill": 0.0,
+   "Jamaica": 0.0,
+   "Morgan": 0.0
+  },
+  "mw_remaining_statement": 109,
+  "fixed_years": 10
+ },
+ "environmental": {
+  "rate": 0.03103,
+  "storage_eligible": false
+ },
+ "statements": [
+  {
+   "no": 98,
+   "effective": "2025-11-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202511.pdf"
+  },
+  {
+   "no": 99,
+   "effective": "2025-12-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202512.pdf"
+  },
+  {
+   "no": 100,
+   "effective": "2026-01-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202601.pdf"
+  },
+  {
+   "no": 101,
+   "effective": "2026-02-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202602.pdf"
+  },
+  {
+   "no": 102,
+   "effective": "2026-03-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202603.pdf"
+  },
+  {
+   "no": 103,
+   "effective": "2026-04-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202604.pdf"
+  },
+  {
+   "no": 104,
+   "effective": "2026-05-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202605.pdf"
+  },
+  {
+   "no": 105,
+   "effective": "2026-06-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202606.pdf"
+  },
+  {
+   "no": 106,
+   "effective": "2026-07-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202607.pdf"
+  },
+  {
+   "no": 107,
+   "effective": "2026-08-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202608.pdf"
+  },
+  {
+   "no": 108,
+   "effective": "2026-09-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202609.pdf"
+  },
+  {
+   "no": 109,
+   "effective": "2026-10-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202610.pdf"
+  }
+ ]
+}

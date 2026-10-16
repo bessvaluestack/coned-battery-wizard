@@ -34,9 +34,9 @@ export async function solveDispatch(inputs) {
       logWarn('worker solve failed, falling back to the main thread:', e);
     }
   }
-  const [{ default: loadHighs }, { solveWithCycleCap }] = await Promise.all([
+  const [{ default: loadHighs }, { solveScenario }] = await Promise.all([
     import('../vendor/highs/highs.mjs'), import('./lp.js'),
   ]);
   const highs = await loadHighs({ locateFile: (f) => new URL('../vendor/highs/' + f, import.meta.url).href });
-  return solveWithCycleCap(highs, inputs);
+  return solveScenario(highs, inputs);
 }

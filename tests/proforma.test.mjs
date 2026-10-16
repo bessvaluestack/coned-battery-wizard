@@ -3,14 +3,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { unzipSync, strFromU8 } from '../vendor/fflate/fflate.mjs';
-import { buildStack, billFor, summarize } from '../js/model.js';
+import { buildStack, billFor, summarize, chargingAccount } from '../js/model.js';
+import { valueStackCredits } from '../js/valuestack.js';
 import { proformaData, fillProforma } from '../js/proforma.js';
 import { bannedWords } from '../scripts/build.mjs';
 
 const read = (p) => JSON.parse(readFileSync(new URL('../data/' + p, import.meta.url), 'utf8'));
 const data = {
-  tariffs: read('tariffs_sc8.json'), statements: read('statements_sc8.json'), msc: read('msc_sc8.json'),
-  lbmp: { J: read('lbmp_J.json'), H: read('lbmp_H.json'), I: read('lbmp_I.json') }, programs: read('programs.json'),
+  tariffs: { ...read('tariffs_sc8.json'), ...read('tariffs_sc9.json'), ...read('tariffs_sc2.json') }, statements: read('statements_sc8.json'), msc: read('msc_sc8.json'),
+  lbmp: { J: read('lbmp_J.json'), H: read('lbmp_H.json'), I: read('lbmp_I.json') }, programs: read('programs.json'), valueStack: read('value_stack.json'),
 };
 const template = readFileSync(new URL('../templates/proforma.xlsx', import.meta.url));
 const cell = (xml, ref) => (xml.match(new RegExp(`<c r="${ref}"[^>]*?(?:/>|>(.*?)</c>)`, 's')) || [])[1] || '';
@@ -77,4 +78,46 @@ test('fill: hourly profiles, rates, savings and program revenue land in their ce
   const demandSaved = summary.monthly.reduce((a, m) => a + (m.demandBefore - m.demandAfter), 0) * stack.taxFactor;
   const g = Array.from({ length: 12 }, (_, m) => num(vs, `G${6 + m}`)).reduce((a, v) => a + v, 0);
   assert.ok(Math.abs(g - demandSaved) < 1e-6);
+});
+
+test('template: Value Stack columns, the export flag and the cash-flow stream', () => {
+  const files = unzipSync(template);
+  const [inputs, , hourly, vs, cf, out] = [1, 2, 3, 4, 5, 6].map((n) => strFromU8(files[`xl/worksheets/sheet${n}.xml`]));
+  assert.match(inputs, /<c r="C14" s="5" t="b"><v>0<\/v><\/c>/);
+  assert.match(cell(inputs, 'C62'), /OR\(C59=\$C\$68,C14=TRUE\)/);
+  assert.match(cell(inputs, 'C65'), /AND\(C59&gt;C68,C14&lt;&gt;TRUE\)/);
+  for (const [ref, text] of [['L5', 'Export credits'], ['M5', 'Capacity'], ['N5', 'Account change']]) assert.match(cell(vs, ref), new RegExp(text), ref);
+  assert.match(cell(vs, 'L6'), /Hourly_Operations!\$K\$6:\$K\$8765/);
+  assert.match(cell(vs, 'P18'), /SUM\(G18,J18,K18,L18,M18,N18,O18\)/);
+  assert.match(cell(hourly, 'K6'), /F6&lt;Inputs!\$C\$68\),-F6\*L6/);
+  assert.match(hourly, /<c r="L8765" s="34"\/>/);
+  assert.match(cell(cf, 'G7'), /Value_Streams!\$L\$18\+Value_Streams!\$M\$18\+Value_Streams!\$N\$18/);
+  assert.match(cell(cf, 'L7'), /SUM\(C7:G7,J7:K7\)/);
+  assert.match(cell(out, 'C13'), /Value_Streams!L18/);
+});
+
+test('fill: a stand-alone battery sets the export flag, the export credit rates and the capacity months', () => {
+  const account = chargingAccount({ modality: 'ftm', rateNo: 1, voltage: 'lt', batteryKw: 200 });
+  const stack = buildStack({ modality: 'ftm', account, region: 'nyc', zone: 'J', demandIntervalMin: 15, taxPct: 2.5, supply: { mode: 'coned_mhp' },
+    valueStack: { election: 'value_stack', network: 'CHELSEA', alt3: { hours: [15, 18], days: 10 } } }, data);
+  const T = stack.idx.T, load = new Float64Array(T);
+  // Charge 100 kW 1-3 am, export 200 kW in the DRV window (14-18) and the Alternative 3 band.
+  const imp = new Float64Array(T), exp = new Float64Array(T);
+  for (let t = 0; t < T; t++) { const h = stack.idx.hour[t]; if (h >= 1 && h < 3) imp[t] = 100; if (h >= 14 && h < 18) exp[t] = 50; }
+  const sol = { imp, exp, dis: exp, ch: imp };
+  const battery = { kw: 200, kwh: 400, rte: 0.88, usableFrac: 0.95, cyclesPerYear: 0, throughputCost: 0 };
+  const zeroBill = { ...billFor(stack, load), fixed: 0, total: 0 };
+  const withB = billFor(stack, imp), credits = valueStackCredits(stack.valueStack, imp, exp);
+  const summary = summarize(stack, load, battery, zeroBill, withB, null, null, sol, { total: 0, streams: [] }, credits);
+  const d = proformaData({ stack, load, sol, summary, revenue: { total: 0, streams: [] }, battery, credits, baseline: zeroBill, withB }, { rateLabel: 'SC 9 Rate I LT' });
+  const files = unzipSync(fillProforma(template, d));
+  const [inputs, , hourly, vs] = [1, 2, 3, 4].map((n) => strFromU8(files[`xl/worksheets/sheet${n}.xml`]));
+  assert.match(inputs, /<c r="C14" s="5" t="b"><v>1<\/v><\/c>/);
+  const drvHour = stack.valueStack.drv.intervals[0] / 4, r = 6 + drvHour;
+  assert.ok(Math.abs(num(hourly, `L${r}`) - (stack.valueStack.energyPrice[drvHour * 4] + stack.valueStack.drv.rate)) < 1e-12);
+  assert.ok(Math.abs(num(hourly, `D${r}`) - num(hourly, `E${r}`) + 50) < 1e-9, 'net grid demand is the export, negative');
+  const m = Array.from({ length: 12 }, (_, i) => num(vs, `M${6 + i}`)).reduce((a, v) => a + v, 0);
+  assert.ok(Math.abs(m - credits.totals.alt3) < 1e-6);
+  const n = Array.from({ length: 12 }, (_, i) => num(vs, `N${6 + i}`)).reduce((a, v) => a + v, 0);
+  assert.ok(Math.abs(n + withB.fixed * stack.taxFactor) < 1e-6, 'the new account\'s customer charge');
 });

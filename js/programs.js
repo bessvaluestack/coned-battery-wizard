@@ -1,22 +1,27 @@
 // Con Edison demand-response riders on the model-year index: Rider T CSRP /
 // DLRP (reservation + performance, rates in the tariff) and Rider AC
-// Term-DLM (pay-as-bid Program Agreement, rates entered by the user).
-// Ported from the reference engine's app/programs/events.py + eligibility.py.
+// Term-DLM / Auto-DLM (pay-as-bid Program Agreement, rates entered by the
+// user). Ported from the reference engine's app/programs/events.py +
+// eligibility.py.
 //
 // Events (design decision 1): the n highest-priced days of the
 // Capability Period (May 1 - Sep 30) by the zone's day-ahead LBMP over the
 // obligation block, which starts at the network's Contracted Hours; CSRP and
-// Term-DLM on non-holiday weekdays, DLRP on any day. Picked with perfect
-// knowledge of prices, never of the site's load.
+// Term-DLM on non-holiday weekdays, DLRP and Auto-DLM on any day (Auto-DLM
+// is really called at 10 minutes' notice between 8 AM and midnight; the
+// Contracted Hours stand in for that). Picked with perfect knowledge of
+// prices, never of the site's load.
 
 import { buildIndex, STEPS_PER_HOUR } from './timeidx.js';
 import { hourlyToIntervals } from './supply.js';
 import { aggregatorNote, PLEDGE_MISSING } from './edition.js';
 
-export const PROGRAM_IDS = ['csrp', 'dlrp', 'term_dlm'];
+export const PROGRAM_IDS = ['csrp', 'dlrp', 'term_dlm', 'auto_dlm'];
 // Rider AC I.2: Rider T customers cannot take Rider AC, except Term-DLM with
-// DLRP. So CSRP and Term-DLM exclude each other.
-export const PROGRAM_EXCLUDES = { csrp: ['term_dlm'], term_dlm: ['csrp'], dlrp: [] };
+// DLRP, and no one takes Term- and Auto-DLM together; since the 2027/28 DLM
+// procurement Auto-DLM accounts may not enrol in CSRP or DLRP either.
+export const PROGRAM_EXCLUDES = { csrp: ['term_dlm', 'auto_dlm'], dlrp: ['auto_dlm'], term_dlm: ['csrp', 'auto_dlm'], auto_dlm: ['csrp', 'dlrp', 'term_dlm'] };
+const SHORT = { csrp: 'CSRP', dlrp: 'DLRP', term_dlm: 'Term-DLM', auto_dlm: 'Auto-DLM' };
 // On concurrent Load Relief Hours only one program pays performance: no DLRP
 // performance during CSRP hours (Rider T J), no Term-DLM performance during
 // DLRP hours (Rider AC I.1). program -> the programs that take its hours.
@@ -25,6 +30,7 @@ export const PROGRAM_LABELS = {
   csrp: 'Rider T - Commercial System Relief Program (CSRP)',
   dlrp: 'Rider T - Distribution Load Relief Program (DLRP)',
   term_dlm: 'Rider AC - Term Dynamic Load Management (Term-DLM)',
+  auto_dlm: 'Rider AC - Auto Dynamic Load Management (Auto-DLM)',
 };
 
 function countedEventType(prog) {
@@ -81,7 +87,7 @@ export function terms(prog, programId, network, nEvents, overrides = {}) {
     out.group = null;
     out.reservationRate = +overrides.reservationRate || 0;
     out.performanceRate = +overrides.performanceRate || 0;
-    if (!out.reservationRate) out.flags.push('Term-DLM rates are pay-as-bid (not in the tariff): enter the agreement\'s reservation rate.');
+    if (!out.reservationRate) out.flags.push(`${SHORT[programId]} rates are pay-as-bid (not in the tariff): enter the agreement's reservation rate.`);
   } else {
     const key = prog.reservation_rate_key;
     const group = key === 'dlrp_tier' ? (network.dlrp_tier || 'tier_1') : (network.county_group || 'westchester_staten_island');
@@ -95,12 +101,13 @@ export function terms(prog, programId, network, nEvents, overrides = {}) {
 }
 
 /**
- * @param cfg  { enabled: {csrp, dlrp, term_dlm}, network: name, pledgeKw, events: {csrp, dlrp, term_dlm},
- *               termDlm: {reservationRate, performanceRate}, participation: 'direct'|'aggregated' }
+ * @param cfg  { enabled: {csrp, dlrp, term_dlm, auto_dlm}, network: name, pledgeKw, events: {...},
+ *               termDlm / autoDlm: {reservationRate, performanceRate}, participation: 'direct'|'aggregated' }
  * @param data { programs (programs.json), lbmp: {J,H,I} }
+ * @param opts { riderR: a Rider R (Value Stack) customer - paid no performance (Rider T J, Rider AC I.1) }
  * @returns { programs: [...LP-ready program dicts], notes: [], blocked: [] }
  */
-export function buildPrograms(cfg, data, zone) {
+export function buildPrograms(cfg, data, zone, opts = {}) {
   const out = { programs: [], notes: [], blocked: [], network: null };
   const enabled = PROGRAM_IDS.filter((id) => cfg.enabled && cfg.enabled[id]);
   if (!enabled.length) return out;
@@ -110,7 +117,7 @@ export function buildPrograms(cfg, data, zone) {
   const pledge = +cfg.pledgeKw || 0;
   if (pledge <= 0) { out.blocked.push(PLEDGE_MISSING); return out; }
   for (const id of enabled) for (const x of PROGRAM_EXCLUDES[id] || []) {
-    if (id < x && enabled.includes(x)) { out.blocked.push(`${id.toUpperCase()} and ${x.toUpperCase().replace('_', '-')} cannot be combined (Rider AC I.2: of Rider T, only DLRP can be added to Term-DLM).`); return out; }
+    if (id < x && enabled.includes(x)) { out.blocked.push(`${SHORT[id]} and ${SHORT[x]} cannot be combined (Rider AC I.2: of Rider T, only DLRP can be added to Term-DLM; Auto-DLM stands alone).`); return out; }
   }
   const lbmp15 = hourlyToIntervals(data.lbmp[zone].hourly);
   const eventSets = {};
@@ -123,7 +130,8 @@ export function buildPrograms(cfg, data, zone) {
     }
     const n = +(cfg.events && cfg.events[id]) || 0;
     const evs = selectEvents(prog, net, n, lbmp15);
-    const tm = terms(prog, id, net, n, id === 'term_dlm' ? cfg.termDlm : {});
+    const tm = terms(prog, id, net, n, id === 'term_dlm' ? cfg.termDlm : id === 'auto_dlm' ? cfg.autoDlm : {});
+    if (opts.riderR && tm.performanceRate) tm.performanceRate = 0;
     if (!evs.length) { out.notes.push(`${id.toUpperCase()}: no events (count 0 or no Contracted Hours) - reservation value needs at least one event to size the delivered share.`); }
     eventSets[id] = new Set(); for (const e of evs) for (const t of e.intervals) eventSets[id].add(t);
     out.programs.push({
@@ -143,9 +151,10 @@ export function buildPrograms(cfg, data, zone) {
     if (keep.length === own.length) continue;
     p.performanceIntervals = Int32Array.from(keep);
     const hours = (own.length - keep.length) / STEPS_PER_HOUR;
-    out.notes.push(`${p.id.toUpperCase().replace('_', '-')} and ${over.map((x) => x.toUpperCase()).join(', ')} events overlap for ${hours} hours; those hours pay performance under ${over.map((x) => x.toUpperCase()).join(', ')} only.`);
+    if (p.performanceRate) out.notes.push(`${SHORT[p.id]} and ${over.map((x) => SHORT[x]).join(', ')} events overlap for ${hours} hours; those hours pay performance under ${over.map((x) => SHORT[x]).join(', ')} only.`);
   }
-  out.notes.push('Baseline for load relief = the no-battery meter (this profile). Con Edison\'s Customer Baseline Load method is not reproduced; a daily-cycling battery erodes a CBL over time.');
+  if (opts.riderR && out.programs.length) out.notes.push('As a Value Stack (Rider R) customer the battery earns the reservation only: performance payments are not made to Rider R customers (Rider T J, Rider AC I.1). Exports during events count as load relief.');
+  out.notes.push('Baseline for load relief = the meter without the battery (this profile; zero for a stand-alone battery). Con Edison\'s Customer Baseline Load method is not reproduced; a daily-cycling battery erodes a CBL over time.');
   out.notes.push('Event days are the highest-priced Capability Period days by day-ahead LBMP, chosen with perfect foresight; reservation is paid in proportion to the delivered share (maximin over events).');
   return out;
 }

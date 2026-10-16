@@ -1,0 +1,274 @@
+{
+ "note": "Con Edison Statements of Value Stack Credits (VDER-CRED), one per month, read from the published PDFs and checked twice against the text. Phase Two values.",
+ "loss_factor": {
+  "value": 1.061,
+  "note": "General Rule 25.1, Factor of Adjustment for Losses (1.061 for 5.8% losses, effective 02/01/2026); applies to the energy component (Rider R H.4.a) and the Alternative 3 credit (H.4.b). Earlier statements may have used 1.071 (Rev. 9)."
+ },
+ "statements": [
+  {
+   "no": 98,
+   "effective": "2025-11-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202511.pdf",
+   "alt3_usd_per_kw_month": {
+    "nyc": 5.82,
+    "westchester": 2.39
+   },
+   "alt1_usd_per_kwh": {
+    "nyc": 0.03116,
+    "westchester": 0.01378
+   },
+   "alt2_usd_per_kwh": {
+    "nyc": 0.0,
+    "westchester": 0.0
+   },
+   "drv_usd_per_kwh": 0.8536,
+   "lsrv_usd_per_kw_year": 140.76,
+   "environmental_usd_per_kwh": 0.03103
+  },
+  {
+   "no": 99,
+   "effective": "2025-12-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202512.pdf",
+   "alt3_usd_per_kw_month": {
+    "nyc": 6.73,
+    "westchester": 4.11
+   },
+   "alt1_usd_per_kwh": {
+    "nyc": 0.04703,
+    "westchester": 0.03046
+   },
+   "alt2_usd_per_kwh": {
+    "nyc": 0.0,
+    "westchester": 0.0
+   },
+   "drv_usd_per_kwh": 0.8536,
+   "lsrv_usd_per_kw_year": 140.76,
+   "environmental_usd_per_kwh": 0.03103
+  },
+  {
+   "no": 100,
+   "effective": "2026-01-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202601.pdf",
+   "alt3_usd_per_kw_month": {
+    "nyc": 7.02,
+    "westchester": 4.94
+   },
+   "alt1_usd_per_kwh": {
+    "nyc": 0.04341,
+    "westchester": 0.03176
+   },
+   "alt2_usd_per_kwh": {
+    "nyc": 0.0,
+    "westchester": 0.0
+   },
+   "drv_usd_per_kwh": 0.8536,
+   "lsrv_usd_per_kw_year": 140.76,
+   "environmental_usd_per_kwh": 0.03103
+  },
+  {
+   "no": 101,
+   "effective": "2026-02-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202602.pdf",
+   "alt3_usd_per_kw_month": {
+    "nyc": 6.87,
+    "westchester": 4.8
+   },
+   "alt1_usd_per_kwh": {
+    "nyc": 0.03198,
+    "westchester": 0.02256
+   },
+   "alt2_usd_per_kwh": {
+    "nyc": 0.0,
+    "westchester": 0.0
+   },
+   "drv_usd_per_kwh": 0.8536,
+   "lsrv_usd_per_kw_year": 140.76,
+   "environmental_usd_per_kwh": 0.03103
+  },
+  {
+   "no": 102,
+   "effective": "2026-03-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202603.pdf",
+   "alt3_usd_per_kw_month": {
+    "nyc": 5.99,
+    "westchester": 2.41
+   },
+   "alt1_usd_per_kwh": {
+    "nyc": 0.01886,
+    "westchester": 0.00777
+   },
+   "alt2_usd_per_kwh": {
+    "nyc": 0.0,
+    "westchester": 0.0
+   },
+   "drv_usd_per_kwh": 0.8536,
+   "lsrv_usd_per_kw_year": 140.76,
+   "environmental_usd_per_kwh": 0.03103
+  },
+  {
+   "no": 103,
+   "effective": "2026-04-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202604.pdf",
+   "alt3_usd_per_kw_month": {
+    "nyc": 5.97,
+    "westchester": 2.23
+   },
+   "alt1_usd_per_kwh": {
+    "nyc": 0.01716,
+    "westchester": 0.00651
+   },
+   "alt2_usd_per_kwh": {
+    "nyc": 0.0,
+    "westchester": 0.0
+   },
+   "drv_usd_per_kwh": 0.8536,
+   "lsrv_usd_per_kw_year": 140.76,
+   "environmental_usd_per_kwh": 0.03103
+  },
+  {
+   "no": 104,
+   "effective": "2026-05-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202605.pdf",
+   "alt3_usd_per_kw_month": {
+    "nyc": 28.94,
+    "westchester": 8.24
+   },
+   "alt1_usd_per_kwh": {
+    "nyc": 0.07447,
+    "westchester": 0.02115
+   },
+   "alt2_usd_per_kwh": {
+    "nyc": 0.0,
+    "westchester": 0.0
+   },
+   "drv_usd_per_kwh": 0.8536,
+   "lsrv_usd_per_kw_year": 140.76,
+   "environmental_usd_per_kwh": 0.03103
+  },
+  {
+   "no": 105,
+   "effective": "2026-06-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202606.pdf",
+   "alt3_usd_per_kw_month": {
+    "nyc": 27.58,
+    "westchester": 9.14
+   },
+   "alt1_usd_per_kwh": {
+    "nyc": 0.06722,
+    "westchester": 0.02244
+   },
+   "alt2_usd_per_kwh": {
+    "nyc": 0.54133,
+    "westchester": 0.26933
+   },
+   "drv_usd_per_kwh": 0.8536,
+   "lsrv_usd_per_kw_year": 140.76,
+   "environmental_usd_per_kwh": 0.03103
+  },
+  {
+   "no": 106,
+   "effective": "2026-07-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202607.pdf",
+   "alt3_usd_per_kw_month": {
+    "nyc": 13.73,
+    "westchester": 5.85
+   },
+   "alt1_usd_per_kwh": {
+    "nyc": 0.03413,
+    "westchester": 0.01462
+   },
+   "alt2_usd_per_kwh": {
+    "nyc": 0.54133,
+    "westchester": 0.26933
+   },
+   "drv_usd_per_kwh": 0.8536,
+   "lsrv_usd_per_kw_year": 140.76,
+   "environmental_usd_per_kwh": 0.03103
+  },
+  {
+   "no": 107,
+   "effective": "2026-08-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202608.pdf",
+   "alt3_usd_per_kw_month": {
+    "nyc": 12.42,
+    "westchester": 5.59
+   },
+   "alt1_usd_per_kwh": {
+    "nyc": 0.03103,
+    "westchester": 0.01406
+   },
+   "alt2_usd_per_kwh": {
+    "nyc": 0.54133,
+    "westchester": 0.26933
+   },
+   "drv_usd_per_kwh": 0.8536,
+   "lsrv_usd_per_kw_year": 140.76,
+   "environmental_usd_per_kwh": 0.03103
+  },
+  {
+   "no": 108,
+   "effective": "2026-09-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202609.pdf",
+   "alt3_usd_per_kw_month": {
+    "nyc": 12.45,
+    "westchester": 5.4
+   },
+   "alt1_usd_per_kwh": {
+    "nyc": 0.03859,
+    "westchester": 0.01667
+   },
+   "alt2_usd_per_kwh": {
+    "nyc": 0.0,
+    "westchester": 0.0
+   },
+   "drv_usd_per_kwh": 0.8536,
+   "lsrv_usd_per_kw_year": 140.76,
+   "environmental_usd_per_kwh": 0.03103
+  },
+  {
+   "no": 109,
+   "effective": "2026-10-01",
+   "source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/other/vder-value-stack-credits/vder-cred-202610.pdf",
+   "alt3_usd_per_kw_month": {
+    "nyc": 12.8,
+    "westchester": 6.71
+   },
+   "alt1_usd_per_kwh": {
+    "nyc": 0.04981,
+    "westchester": 0.02744
+   },
+   "alt2_usd_per_kwh": {
+    "nyc": 0.0,
+    "westchester": 0.0
+   },
+   "drv_usd_per_kwh": 0.8536,
+   "lsrv_usd_per_kw_year": 140.76,
+   "environmental_usd_per_kwh": 0.03103
+  }
+ ],
+ "lsrv_mw_remaining": {
+  "statement": 109,
+  "effective": "2026-10-01",
+  "unit": "MW",
+  "locations": {
+   "Plymouth Sub-transmission": 0.0,
+   "Water St. Sub-transmission": 0.0,
+   "Glendale, Newtown Sub-transmission: Borden Network / Sunnyside Network / Maspeth Network (single row)": 0.0,
+   "E. 179th St. Area Station": 0.0,
+   "Parkchester No. 1 Area Station": 0.0,
+   "Parkchester No. 2 Area Station": 0.0,
+   "W. 42nd St. No. 1 Area Station": 0.0,
+   "W. 65th St. No. 1 Area Station": 1.5,
+   "Wainwright Area Station": 0.0,
+   "Willowbrook Area Station": 0.0,
+   "Millwood Area Station": 0.0,
+   "Northeast Bronx Network": 0.0,
+   "Yorkville Network": 3.52,
+   "Crown Heights": 0.0,
+   "Ridgewood": 0.0,
+   "Richmond Hill": 0.0,
+   "Jamaica": 0.0,
+   "Morgan": 0.0
+  }
+ }
+}

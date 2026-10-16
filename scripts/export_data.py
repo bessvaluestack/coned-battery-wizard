@@ -7,6 +7,7 @@ static app can fetch.
 
 Writes into data/:
   tariffs_sc8.json    the six compiled SC 8 schedules (Rate I/II/III x LT/HT)
+                      plus the standby Rates IV / V
   statements_sc8.json surcharges + utility supply components (SBC, MAC, RDM,
                       SDR, MSC capacity, MFC, MSC adjustment factors)
   msc_sc8.json        observed Market Supply Charge, daily $/kWh laid onto
@@ -16,6 +17,10 @@ Writes into data/:
                       model year, zones J, H, I
   programs.json       Rider T (CSRP / DLRP) and Rider AC (Term-DLM) terms +
                       the network table (Contracted Hours, DLRP tier, group)
+  tariffs_sc9.json    SC 9 Rates I / III (compiled) and the standby Rates IV / V
+  tariffs_sc2.json    SC 2 Rate I (the charging account of a battery of 10 kW or less)
+  value_stack.json    Rider R Value Stack terms: loss factor, Alternative 3 by
+                      month, DRV rate and call window by network, LSRV
 
 Every file records its provenance (book vintage, dataset vintage, source
 file) so the app can print it next to the numbers.
@@ -65,8 +70,73 @@ def main() -> None:
             "unmodelled": t.get("unmodelled"), "lineage": t.get("lineage"),
             "source_file": f"config/tariffs/{f.name}",
         }
+    # Standby (General Rule 20) schedules are extracted in the book but not
+    # compiled: lay them out in the same form, with the contract demand as a
+    # yearly determinant and the as-used demands as daily ones.
+    book = json.loads((repo / "config" / "tariff_db" / "ny" / "ced" / "books" / "ny.ced.psc10_2026-08-01.json").read_text())
+    schedules = {s["id"]: s for s in book["schedules"]}
+    all_months = list(range(1, 13))
+
+    def standby(book_id: str, out_id: str, service_class: str) -> dict:
+        s = schedules[book_id]
+        charges = []
+        for d in s["demand"]:
+            w = d.get("window") or {}
+            if d["determinant"] == "contract_demand_kw":
+                charges.append({"name": "contract_demand", "rate": d["rate"]["value"], "months": all_months,
+                                "days": "all", "period": "year", "determinant": "contract_demand_kw",
+                                "lineage": [d["id"]]})
+            elif d["determinant"] == "daily_as_used_demand_kw":
+                h = w.get("hours")
+                charges.append({"name": f"as_used_{'summer' if w.get('months') == [6, 7, 8, 9] else 'other'}_{h[0]}_{h[1]}",
+                                "rate": d["rate"]["value"], "months": w.get("months") or all_months,
+                                "days": w.get("days") or "all", "hours": h, "period": "day",
+                                "determinant": "daily_as_used_demand_kw", "lineage": [d["id"]]})
+            else:
+                raise SystemExit(f"{book_id}: unexpected determinant {d['determinant']}")
+        doc = s["customer_charge"]["source"]["anchor"]["document_id"]
+        return {
+            "id": out_id, "name": s["name"], "service_class": service_class, "standby": True,
+            "applicability": (s.get("applicability") or {}).get("text", {}).get("value"),
+            "rate_basis": "delivery_only", "fixed_charge_per_month": s["customer_charge"]["value"],
+            "energy": {"units": "usd_per_kwh", "seasons": [{"name": "all_year", "months": all_months,
+                       "tou": [{"name": "all_hours", "days": "all", "rate": 0.0}]}]},
+            "demand": {"units": "usd_per_kw_month or usd_per_kw_day (period: day)", "charges": charges},
+            "book_vintage": book["book"].get("vintage") if isinstance(book.get("book"), dict) else None,
+            "lineage": [doc], "source_file": f"config/tariff_db/ny/ced/books/ny.ced.psc10_2026-08-01.json#{book_id}",
+        }
+
+    def compiled(pattern: str) -> dict:
+        out = {}
+        for f in sorted((repo / "config" / "tariffs").glob(pattern)):
+            t = yaml.safe_load(f.read_text())
+            out[t["id"]] = {
+                "id": t["id"], "name": t["name"], "service_class": t["service_class"],
+                "applicability": t.get("applicability"), "rate_basis": t.get("rate_basis"),
+                "fixed_charge_per_month": t.get("fixed_charge_per_month", 0.0),
+                "energy": t["energy"], "demand": t.get("demand"),
+                "book_vintage": t.get("book_vintage"), "conversion_notes": t.get("conversion_notes"),
+                "unmodelled": t.get("unmodelled"), "lineage": t.get("lineage"),
+                "source_file": f"config/tariffs/{f.name}",
+            }
+        return out
+
+    # "All other Customers" leaves: new standby customers, not the phase-in ones.
+    for book_id, out_id in [("ny.ced.psc10.sc8.rate4.lt", "corpus_ced_sc8_rate4_lt"), ("ny.ced.psc10.sc8.rate4.ht", "corpus_ced_sc8_rate4_ht"),
+                            ("ny.ced.psc10.sc8.rate5.lt", "corpus_ced_sc8_rate5_lt"), ("ny.ced.psc10.sc8.rate5.ht_below138", "corpus_ced_sc8_rate5_ht")]:
+        tariffs[out_id] = standby(book_id, out_id, "SC 8")
     (OUT / "tariffs_sc8.json").write_text(json.dumps(tariffs, indent=1))
     print("tariffs:", list(tariffs))
+
+    sc9 = compiled("corpus_ced_sc9_rate[13]_*.yaml")
+    for book_id, out_id in [("ny.ced.psc10.sc9.rate4.lt.leaf452_2", "corpus_ced_sc9_rate4_lt"), ("ny.ced.psc10.sc9.rate4.ht.leaf452_2", "corpus_ced_sc9_rate4_ht"),
+                            ("ny.ced.psc10.sc9.rate5.lt", "corpus_ced_sc9_rate5_lt"), ("ny.ced.psc10.sc9.rate5.ht_below138", "corpus_ced_sc9_rate5_ht")]:
+        sc9[out_id] = standby(book_id, out_id, "SC 9")
+    (OUT / "tariffs_sc9.json").write_text(json.dumps(sc9, indent=1))
+    print("tariffs sc9:", list(sc9))
+    sc2 = compiled("corpus_ced_sc2_rate1.yaml")
+    (OUT / "tariffs_sc2.json").write_text(json.dumps(sc2, indent=1))
+    print("tariffs sc2:", list(sc2))
 
     # ---- statements ------------------------------------------------------
     sup = yaml.safe_load((repo / "config" / "supply" / "ny.ced.psc10.yaml").read_text())
@@ -147,6 +217,32 @@ def main() -> None:
         },
         "indexed_not_compiled": sup.get("indexed_not_compiled"),
     }
+
+    def demand_row(rows: list[dict], id_suffix: str) -> float | None:
+        # Demand surcharges print a non-LMI line, an LMI line (.n2) and the total (.n3).
+        return row_value(rows, id_suffix + ".n3") if row_value(rows, id_suffix + ".n3") is not None else row_value(rows, id_suffix)
+
+    # Per service class, for the accounts a Value Stack battery charges on:
+    # $/kWh adjustments (on top of the NYSERDA SBC and the MAC) and $/kW
+    # adjustments keyed by the determinant they ride on.
+    statements["by_class"] = {
+        "sc2": {"kwh": {"rdm": row_value(rdm_rows, "rdm.sc_2.kwh"), "sdr": row_value(sdr_rows, "sc_2_rates_i_ii_and_rider_aa.kwh"),
+                        "sbc_company_ee": row_value(sbc_rows, "sc_2_rates_i_and_ii.total_company_administered_ee_be_charge.kwh")},
+                "kw": {}, "mfc": pick("MFC", "sc2_total_merchant_function_charge_all")},
+        "sc8": {"kwh": {"rdm": row_value(rdm_rows, "rdm.sc_8.kwh"), "sdr": row_value(sdr_rows, "sc_8_rates_i_ii_and_iii.kwh")},
+                "kw": {"rate1": {"monthly_max_demand_kw": demand_row(sbc_rows, "sc_8_rate_i.monthly_max_demand_kw")},
+                       "tod": {"tod_demand_kw": demand_row(sbc_rows, "sc_8_rates_ii_and_iii.total.tod_demand_kw")},
+                       "standby": {"contract_demand_kw": (demand_row(sbc_rows, "sc_8_rates_iv_and_v.contract_demand_kw") or 0)
+                                   + (row_value(sdr_rows, "sc_8_rates_iv_and_v.contract_demand_kw") or 0)}},
+                "mfc": pick("MFC", "scs5_6_8_9_12_13_total_merchant_function_charge_all")},
+        "sc9": {"kwh": {"rdm": row_value(rdm_rows, "rdm.sc_9.kwh"), "sdr": row_value(sdr_rows, "sc_9_rates_i_ii_and_iii.kwh")},
+                "kw": {"rate1": {"monthly_max_demand_kw": demand_row(sbc_rows, "sc_9_rate_i.monthly_max_demand_kw")},
+                       "tod": {"tod_demand_kw": demand_row(sbc_rows, "sc_9_rates_ii_and_iii.total.tod_demand_kw")},
+                       "standby": {"contract_demand_kw": (demand_row(sbc_rows, "sc_9_rates_iv_and_v.contract_demand_kw") or 0)
+                                   + (row_value(sdr_rows, "sc_9_rates_iv_and_v.contract_demand_kw") or 0)}},
+                "mfc": pick("MFC", "scs5_6_8_9_12_13_total_merchant_function_charge_all")},
+        "note": "Standby contract-demand adjustments are the SBC and SDR contract-demand rows; standby schedules carry no SDR $/kWh.",
+    }
     (OUT / "statements_sc8.json").write_text(json.dumps(statements, indent=1))
     print("statements written")
 
@@ -202,6 +298,43 @@ def main() -> None:
                 "notes": pg.get("notes")}
     (OUT / "programs.json").write_text(json.dumps(programs, indent=1))
     print("programs written:", len(pg["networks"]), "networks")
+
+    # ---- Value Stack (Rider R Phase Two) --------------------------------
+    # Component terms and the DRV call window by network from the compiled
+    # compensation file; the monthly rates from the twelve statements in
+    # scripts/value_stack_statements.json (read from Con Edison's PDFs).
+    comp = yaml.safe_load((repo / "config" / "compensation" / "ny.ced.psc10.yaml").read_text())
+    vs_hist = json.loads((HERE / "value_stack_statements.json").read_text())
+    c = comp["components"]
+    stmts = sorted(vs_hist["statements"], key=lambda r: r["effective"])
+    latest = stmts[-1]
+    by_month = {}
+    for r in stmts:  # the latest statement for each calendar month
+        by_month[int(r["effective"][5:7])] = r
+    drv = c["drv"]
+    value_stack = {
+        "book_vintage": comp.get("book_vintage"), "status": comp.get("status"),
+        "loss_factor": vs_hist["loss_factor"]["value"], "loss_factor_note": vs_hist["loss_factor"]["note"],
+        "region_zones": comp["region_zones"],
+        "energy": {"basis": "NYISO day-ahead hourly zonal LBMP x loss factor, on each hour's net injection"},
+        "alt3": {"unit": "USD/kW-month",
+                 "by_month": {str(m): {"nyc": r["alt3_usd_per_kw_month"]["nyc"], "westchester": r["alt3_usd_per_kw_month"]["westchester"],
+                                       "statement": r["no"], "effective": r["effective"]} for m, r in sorted(by_month.items())},
+                 "peak_hour": "the New York Control Area peak hour of the previous calendar year, on a non-holiday weekday in July or August"},
+        "drv": {"rate": latest["drv_usd_per_kwh"], "unit": "USD/kWh", "date_range": drv["window"]["date_range"],
+                "days": drv["window"]["days"], "exclude_holidays": drv["window"]["exclude_holidays"],
+                "call_windows": [w["hours"] for w in drv["call_windows"]],
+                "window_by_network": {n: w["hours"] for n, w in sorted(drv["window_by_network"].items())},
+                "fixed_years": 10},
+        "lsrv": {"rate": latest["lsrv_usd_per_kw_year"], "unit": "USD/kW-year", "min_events": 10, "max_event_hours": 4,
+                 "date_range": ["06-24", "09-15"], "days": "weekdays",
+                 "mw_remaining": vs_hist["lsrv_mw_remaining"]["locations"],
+                 "mw_remaining_statement": vs_hist["lsrv_mw_remaining"]["statement"], "fixed_years": 10},
+        "environmental": {"rate": latest["environmental_usd_per_kwh"], "storage_eligible": False},
+        "statements": [{"no": r["no"], "effective": r["effective"], "source": r["source"]} for r in stmts],
+    }
+    (OUT / "value_stack.json").write_text(json.dumps(value_stack, indent=1))
+    print("value stack written: alt3 months", sorted(by_month), "drv networks", len(value_stack["drv"]["window_by_network"]))
 
 
 if __name__ == "__main__":

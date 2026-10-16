@@ -1,11 +1,22 @@
-# SC 8 Battery Wizard
+# Con Edison Battery Wizard
 
-A static, browser-only wizard that models a behind-the-meter battery for a
-large master-metered multifamily building on Con Edison **Service
-Classification 8 (Multiple Dwellings, Redistribution)** and reports the annual
-savings. No backend: the tariff engine, supply model, program terms and the
-dispatch optimisation (HiGHS compiled to WebAssembly) all run in the page, so
-it deploys to GitHub Pages or as a claude.ai artifact as-is.
+A static, browser-only wizard that models a battery in Con Edison territory
+and reports its annual value, in three modalities:
+
+- **Behind the meter, no export**: a large master-metered multifamily
+  building on **Service Classification 8 (Multiple Dwellings,
+  Redistribution)**, bill savings plus Rider T / Rider AC demand response.
+- **Behind the meter, exporting under the Value Stack**: the same building,
+  with the battery's net hourly injections credited under Rider R A.9(d)
+  with SC 11 buy-back service.
+- **Front of the meter (stand-alone), Value Stack**: a battery with its own
+  account (SC 2, SC 9, or SC 9 standby) and no load, charging from and
+  exporting to the grid.
+
+No backend: the tariff engine, supply model, program and Value Stack terms
+and the dispatch optimisation (HiGHS compiled to WebAssembly) all run in the
+page, so it deploys to GitHub Pages or as a claude.ai artifact as-is. It
+started as a copy of the SC 8 Battery Wizard, which stays live separately.
 
 Inputs are compiled from the Con Edison P.S.C. No. 10 tariff corpus by an
 upstream tariff model (the reference engine); `scripts/export_data.py` is the
@@ -13,7 +24,20 @@ one-time bridge (see *Data*).
 
 ## The wizard
 
-1. **Rate**: SC 8 Rate I / II / III, low or high tension, NYC or Westchester,
+The steps follow the modality: a stand-alone battery has no Load step, and
+the Value Stack modalities pick an election instead of the riders.
+
+0. **Modality**: the three project types and an outline of what each needs
+   (account and tariff, exports, revenue, demand response, interconnection,
+   metering, permits and incentives, what is not available).
+1. **Rate** (**Site** for a stand-alone battery): SC 8 Rate I / II / III, or
+   the battery's own account, which follows its power rating: SC 2 up to
+   10 kW, SC 9 Rate I or III on standard rates up to 1 MW (storage is a
+   Designated Technology, General Rule 20.3.2(b)), SC 9 standby Rate IV / V
+   above (Rate V above 1,500 kW of contract demand). Behind the meter with
+   exports the building stays on standard SC 8 unless the battery is above
+   1 MW and above 15% of the building's peak (then SC 8 standby). Low or
+   high tension, NYC or Westchester,
    15-minute (default) or 30-minute billing demand, delivery $/kWh
    adjustments (SBC, MAC, RDM, SDR) and the SBC demand surcharge, a
    tax/surcharge percentage.
@@ -21,11 +45,22 @@ one-time bridge (see *Data*).
    billing period + MSC capacity $/kW-month), Con Edison Rider M hourly
    pricing (zonal day-ahead LBMP + ICAP tag), third-party fixed $/kWh, or
    third-party LBMP + adder.
-3. **Riders**: Rider T CSRP and DLRP (rates in the tariff, keyed on the site's
-   distribution network: Contracted Hours, county group, DLRP tier) and
-   Rider AC Term-DLM (pay-as-bid, rates entered). Pledge, participation and
-   events per season are scenario inputs.
-4. **Load**: four preset 35,040-interval profiles, an estimate scaled from the
+   Rider M is forced where it is mandatory (standby customers, and Value
+   Stack storage above 115% of the on-site load, so always in front of the
+   meter); with the Value Stack its capacity tag is priced on the import in
+   the likely NYISO peak hours.
+3. **Riders** (no export): Rider T CSRP and DLRP (rates in the tariff, keyed
+   on the site's distribution network: Contracted Hours, county group, DLRP
+   tier) and Rider AC Term-DLM or Auto-DLM (pay-as-bid, rates entered), in
+   the tariff's combinations only. Pledge, participation and events per
+   season are scenario inputs.
+   **Value Stack** (exports): the network (its CSRP call window sets the
+   DRV hours), the election (keep the DRV and LSRV; or Rider T CSRP / DLRP,
+   which ends them for good; or Rider AC Term- / Auto-DLM, which suspends
+   them for the contract; a Rider R customer is paid the reservation only),
+   LSRV where the location has MW left, and the Alternative 3 commitment
+   band (hours, days, optional rate override).
+4. **Load** (behind the meter): four preset 35,040-interval profiles, an estimate scaled from the
    bills (an annual total, by bisection on the modelled bill, or twelve
    calendar-month bills, each month of the shape scaled on its own; boxes
    start at the shape's modelled bills, sliders run 50% to 200% of them), or
@@ -39,19 +74,33 @@ one-time bridge (see *Data*).
    component before and after, monthly peaks, a week of dispatch with state
    of charge, assumptions and provenance, JSON / CSV export, and the owner
    pro-forma (XLSX, below). CSRP or DLRP delivering under 80% of the pledge
-   (weakest event) is flagged.
+   (weakest event) is flagged. With the Value Stack: the annual net benefit,
+   the credits by component and month (energy, Alternative 3, DRV, LSRV),
+   the account's bill, and for a Rider T / Rider AC election what keeping
+   the DRV and LSRV would have earned (a second solve).
 
 ## Owner pro-forma (XLSX)
 
 `templates/proforma.xlsx` is the owner's multifamily storage workbook with a
-program revenue stream added; the results page fills it in the browser
-(`js/proforma.js`, zip handling by the vendored `fflate`, MIT):
+program revenue stream and Value Stack streams added; the results page fills
+it in the browser for all three modalities (`js/proforma.js`, zip handling by
+the vendored `fflate`, MIT):
 
 - Hourly_Operations: baseline and dispatch as hourly averages of the run
-  (positive = discharge), and the hour's all-in energy rate, taxes included.
+  (positive = discharge, net of charging, so baseline minus dispatch is the
+  hour's net grid demand), the hour's all-in energy rate, taxes included,
+  and with exports the credit per exported kWh (L: LBMP x losses, plus the
+  DRV in the call window) and the hour's export credit (K).
 - Value_Streams: the run's 15-minute billing peaks, demand savings (every
   demand window, SBC and supply capacity) and program revenue by month; the
-  workbook's own formulas give arbitrage savings, which match the run.
+  workbook's own formulas give arbitrage savings, which match the run. With
+  exports: export credits (L, summed from the hourly sheet), Alternative 3
+  and LSRV (M), and the account change (N: a stand-alone battery's customer
+  charge, or the energy-rate change when the battery moves the building to
+  standby). Project_Cash_Flow carries them as a Value Stack credits column,
+  Outputs as a Year 1 row.
+- Inputs C14 flags Value Stack exports: grid-export hours are then expected
+  instead of invalid.
 - Utility_Rates: effective monthly rates for its readiness checks and bill
   reconciliation, and the monthly bills when they were entered.
 - Inputs: utility, rate and battery specs, and the installed cost when one
@@ -76,16 +125,40 @@ node scripts/make_proforma_template.mjs doc/<workbook>.xlsx
 - Canonical index: model year 2027, 15-minute, 35,040 intervals, naive local
   time (DST ignored), the reference engine's convention.
 - Delivery bill: energy $/kWh + per-window demand charges (`rate x max import
-  in window and month`), merged with every other $/kW-month determinant
-  (SBC demand, supply capacity) that shares the window.
-- Dispatch: one LP over the whole year with the battery sizes fixed, no
-  export, cyclic state of charge, an annual discharge budget, perfect
-  foresight; program load relief as in the reference engine (`relief <= baseline - import`,
-  delivered share = the worst event, reservation paid on the share,
-  performance on relief kWh). When programs are enrolled a second bill-only
-  solve is reported for comparison.
+  in window and period`), merged with every other $/kW determinant (SBC
+  demand, supply capacity) that shares the window. The period is the month,
+  the day (standby as-used daily demand, $/kW-day, weekdays 8-18 and 8-22)
+  or the year (standby contract demand: one kW billed every month, chosen by
+  the dispatch).
+- Dispatch: one LP over the whole year with the battery sizes fixed, cyclic
+  state of charge, an annual discharge budget, perfect foresight; program
+  load relief as in the reference engine (`relief <= baseline - import +
+  export`, delivered share = the worst event, reservation paid on the share,
+  performance on relief kWh). When programs are enrolled behind the meter
+  without exports, a second bill-only solve is reported for comparison.
+- Value Stack (`js/valuestack.js`): exports only from discharge (no grid
+  pass-through); energy credit at day-ahead LBMP x 1.061 (General Rule 25.1
+  losses) on each hour's net injection; the DRV ($0.8536/kWh) on net
+  injection in the network's CSRP call window, non-holiday weekdays June 24
+  to September 15, with no charging in the window; Alternative 3 paid all
+  year at the month's statement rate x 1.061 on a kW the battery holds
+  through a band of likely NYCA peak hours (default 15:00 to 18:00 on the 10
+  top-priced July and August weekdays: the real hour, the previous year's
+  NYCA peak, is not known in advance); LSRV at $140.76/kW-year over at least
+  10 events on the lowest net injection in each, where the location has MW
+  left. Outside the DRV window the LP caps the export credit just below the
+  import price so it never buys and sells in one interval; inside it a
+  battery behind a building's meter can earn more exporting than the
+  building pays importing, so a second solve fixes each window interval to
+  the side the first netted to (exact, and never worse than the first). A
+  commitment the battery cannot hold over the building's load (Alternative
+  3, LSRV) is dropped with a note. The reported credits use the real
+  prices and hourly netting.
 - Solver: `highs` 1.15.3 (`vendor/highs`, MIT) in a module worker; a full
-  year solves in 5 to 20 seconds depending on the rate.
+  year solves in 5 to 20 seconds without exports. The Value Stack solves are
+  larger: about 20 to 40 seconds for a stand-alone battery and up to two or
+  three minutes for a large one behind a building's meter (two passes),
+  twice that when an election is compared with keeping the DRV.
 
 ## Run locally
 
@@ -131,7 +204,9 @@ Source: GitHub Actions).
 | `statements_sc8.json` | SBC, MAC, RDM, SDR, MSC capacity, MFC, MSC adjustment factors | `config/supply/ny.ced.psc10.yaml` + `config/tariff_db/.../statements` |
 | `msc_sc8.json` | Observed MSC $/kWh per calendar day (codes 008CNV / 008TOD, zones J/H/I, all / on / off peak), 12 months to 2026-08 | MSC lookup dataset vintage 2026-09-25 |
 | `lbmp_{J,H,I}.json` | NYISO day-ahead hourly LBMP on the model year | `data/lbmp/<zone>.csv` (2025-07 to 2026-06) |
-| `programs.json` | CSRP / DLRP / Term-DLM terms and the 83-network table | `config/programs/ny.ced.psc10.yaml` |
+| `programs.json` | CSRP / DLRP / Term-DLM / Auto-DLM terms and the 83-network table | `config/programs/ny.ced.psc10.yaml` |
+| `tariffs_sc9.json`, `tariffs_sc2.json` | SC 9 Rate I / III and SC 2 Rate I (compiled), SC 9 standby Rate IV / V (all other customers, from the extracted book); `tariffs_sc8.json` also carries SC 8 Rate IV / V | `config/tariffs/corpus_ced_sc{9,2}_*.yaml`, `config/tariff_db/ny/ced/books/ny.ced.psc10_2026-08-01.json` |
+| `value_stack.json` | Loss factor, Alternative 3 by month (statements Nov 2025 to Oct 2026), DRV rate and call window by network, LSRV rate and MW remaining | `config/compensation/ny.ced.psc10.yaml` + `scripts/value_stack_statements.json` (read from Con Edison's published Statements of Value Stack Credits) |
 | `profiles/*.json` | Four synthetic multifamily profiles | `scripts/make_profiles.mjs` (seeded) |
 
 Regenerate with the reference engine's virtualenv:
@@ -153,8 +228,20 @@ node scripts/make_profiles.mjs
   reservations are paid on the same pledge; an hour in both programs' events
   pays performance once, CSRP over DLRP (Rider T J) and DLRP over Term-DLM
   (Rider AC I.1).
-- Import only (no export, no Rider R / standby).
 - Single editable tax/surcharge percentage (2.5%).
+
+## Value Stack decisions (2026-10-16)
+
+- Three modalities: behind the meter without export, behind the meter
+  exporting under the Value Stack, front of the meter stand-alone.
+- A Value Stack battery picks one election; the results compare a Rider T
+  or Rider AC election with keeping the DRV and LSRV.
+- Alternative 3 is paid on a kW committed over likely peak hours, not on a
+  known hour.
+- Alternative 3 uses the 12 monthly statement values (one override).
+- Charging account: SC 2 up to 10 kW, SC 9 standard up to 1 MW, SC 9
+  standby above, up to the 5 MW Value Stack cap.
+- The owner pro-forma covers all three modalities.
 
 ## Next version (planned)
 
@@ -174,6 +261,13 @@ node scripts/make_profiles.mjs
   redistribution is sales-tax exempt.
 - Program baselines are the no-battery meter, not Con Edison's CBL; event
   days are chosen with perfect price foresight.
-- No export, no Rider R / Value Stack, no standby (Rate IV / V) rates, no
-  reactive charges, no minimum charges, single year, no degradation or
-  escalation.
+- No reactive charges, no minimum charges, single year, no degradation or
+  escalation, no 25-year Value Stack term.
+- Value Stack: the SC 11 charges are not added (the customer charge is
+  waived when another service class serves the same connection; stand-alone
+  storage is exempt from the SC 11 contract demand charge for 15 years if it
+  qualifies by the end of 2030). The Wholesale Value Stack, remote crediting
+  and the NYSERDA incentive are not modelled. Auto-DLM events are placed in
+  the network's Contracted Hours (the real calls come at 10 minutes' notice
+  between 8 AM and midnight). The standby exemption for storage up to 1 MW
+  is applied to a front-of-meter account too.

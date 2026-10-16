@@ -1,10 +1,12 @@
-// SC 8 delivery tariff -> per-interval delivery energy rate + demand charges,
-// and the closed-form bill for a fixed import profile. Ported from the reference engine's
-// app/tariffs/engine.py (seasons/TOU form only - that is what the compiled
-// Con Edison schedules use).
+// Con Edison delivery tariff (SC 2 / 8 / 9) -> per-interval delivery energy
+// rate + demand charges, and the closed-form bill for a fixed import profile.
+// Ported from the reference engine's app/tariffs/engine.py (seasons/TOU form
+// only - that is what the compiled Con Edison schedules use).
 //
-// A demand charge bills rate x max(import kW over the intervals in its window
-// within the month). The demand interval (15 or 30 minutes) is a billing
+// A demand charge bills rate x max(import kW over the intervals in its window)
+// per period: the month (the default), the day (standby as-used daily demand,
+// $/kW-day) or the year (standby contract demand: one kW for the whole year,
+// billed every month). The demand interval (15 or 30 minutes) is a billing
 // convention: with 30 minutes the determinant is the max of half-hour
 // averages of the 15-minute profile.
 
@@ -37,7 +39,7 @@ export function buildTariffArrays(tariff, opts = {}) {
     demandCharges.push(makeCharge(idx, {
       name: c.name, rate: +c.rate, months: c.months || [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
       days: c.days || 'all', hours: c.hours || null, group: 'delivery_demand',
-      determinant: c.determinant,
+      determinant: c.determinant, period: c.period,
     }));
   }
   for (const c of opts.extraDemandCharges || []) demandCharges.push(makeCharge(idx, c));
@@ -53,30 +55,55 @@ export function buildTariffArrays(tariff, opts = {}) {
   };
 }
 
-// A demand charge with an explicit day/hour mask (month handled per billing month).
+// A demand charge with an explicit day/hour mask (month handled per billing
+// month), or an explicit interval mask (`mask`, e.g. the likely system-peak
+// hours an ICAP tag is measured in) with its own `windowKey`.
 export function makeCharge(idx, c) {
   return {
     name: c.name, rate: +c.rate, months: c.months || [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
     days: c.days || 'all', hours: c.hours || null,
-    mask: andMasks(dayMask(idx, c.days || 'all'), hourMask(idx, c.hours || null)),
+    mask: c.mask || andMasks(dayMask(idx, c.days || 'all'), hourMask(idx, c.hours || null)),
     group: c.group || 'other_demand', determinant: c.determinant || null,
-    windowKey: `${c.days || 'all'}|${c.hours ? c.hours.join('-') : 'all'}`,
+    period: c.period || 'month',
+    windowKey: c.windowKey || `${c.days || 'all'}|${c.hours ? c.hours.join('-') : 'all'}`,
   };
 }
 
-// (charge, month, Int32Array of eligible interval positions) triples.
-export function monthlyPeakGroups(charges, idx) {
+// One group per billed peak: { charge, key, month (first billed month), idx
+// (Int32Array of eligible interval positions), alloc: [[month, $/kW], ...] }.
+// A monthly charge gives one group per month, a daily one a group per day, a
+// yearly one a single group billed in each of its months.
+export function peakGroups(charges, idx) {
   const out = [];
   for (const ch of charges) {
+    const wk = `${ch.period}|${ch.windowKey}`;
+    if (ch.period === 'year') {
+      const pos = [];
+      for (const m of ch.months) for (let t = idx.monthStart[m - 1]; t < idx.monthStart[m]; t++) if (ch.mask[t]) pos.push(t);
+      if (pos.length) out.push({ charge: ch, key: `y|${wk}`, month: ch.months[0], idx: Int32Array.from(pos), alloc: ch.months.map((m) => [m, ch.rate]) });
+      continue;
+    }
     for (const m of ch.months) {
       const a = idx.monthStart[m - 1], b = idx.monthStart[m];
+      if (ch.period === 'day') {
+        let day = -1, pos = [];
+        const flush = () => { if (pos.length) out.push({ charge: ch, key: `d${day}|${wk}`, month: m, day, idx: Int32Array.from(pos), alloc: [[m, ch.rate]] }); pos = []; };
+        for (let t = a; t < b; t++) {
+          if (idx.doy[t] !== day) { flush(); day = idx.doy[t]; }
+          if (ch.mask[t]) pos.push(t);
+        }
+        flush();
+        continue;
+      }
       const pos = [];
       for (let t = a; t < b; t++) if (ch.mask[t]) pos.push(t);
-      if (pos.length) out.push({ charge: ch, month: m, idx: Int32Array.from(pos) });
+      if (pos.length) out.push({ charge: ch, key: `m${m}|${wk}`, month: m, idx: Int32Array.from(pos), alloc: [[m, ch.rate]] });
     }
   }
+  for (const g of out) g.rate = g.alloc.reduce((a, [, r]) => a + r, 0);
   return out;
 }
+export const monthlyPeakGroups = peakGroups;
 
 // Billing demand over a set of interval positions. 30-minute billing takes
 // the max of half-hour averages (pairs aligned to :00 / :30).
@@ -105,12 +132,14 @@ export function billFromProfile({ energyRate, charges, fixedAnnual, idx, importK
   const peaks = [];
   const byGroup = {};
   let demand = 0;
-  for (const g of monthlyPeakGroups(charges, idx)) {
+  for (const g of peakGroups(charges, idx)) {
     const pk = peakOf(importKw, g.idx, demandIntervalMin);
-    const cost = g.charge.rate * pk;
-    demand += cost;
-    byGroup[g.charge.group] = (byGroup[g.charge.group] || 0) + cost;
-    peaks.push({ charge: g.charge.name, group: g.charge.group, month: g.month, peakKw: pk, rate: g.charge.rate, cost });
+    for (const [month, rate] of g.alloc) {
+      const cost = rate * pk;
+      demand += cost;
+      byGroup[g.charge.group] = (byGroup[g.charge.group] || 0) + cost;
+      peaks.push({ charge: g.charge.name, group: g.charge.group, month, day: g.day, period: g.charge.period, peakKw: pk, rate, cost });
+    }
   }
   return { energy, demand, demandByGroup: byGroup, fixed: fixedAnnual, peaks, subtotal: energy + demand + fixedAnnual };
 }

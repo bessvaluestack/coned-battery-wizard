@@ -1,4 +1,4 @@
-// Commodity supply on top of the delivery-only SC 8 schedules.
+// Commodity supply on top of the delivery-only SC 2 / 8 / 9 schedules.
 //
 //   coned_msc   Con Edison full service: the observed Market Supply Charge
 //               (energy, $/kWh by billing period from the corpus dataset,
@@ -64,7 +64,7 @@ export function hourlyToIntervals(hourly) {
 export function mean(arr) { let s = 0; for (let i = 0; i < arr.length; i++) s += arr[i]; return s / arr.length; }
 
 /**
- * @param cfg  { mode, region: 'nyc'|'westchester', zone: 'J'|'H'|'I', rateNo: 1|2|3,
+ * @param cfg  { mode, region: 'nyc'|'westchester', zone: 'J'|'H'|'I', rateNo: 1|2|3 (SC 8), mfcDefault,
  *               capacityRate (override $/kW-month or null), mfc ($/kWh), reconciliation ($/kWh),
  *               taxReimbursement ($/kWh), fixedRate ($/kWh), adder ($/kWh), escoCapacity ($/kW-month) }
  * @param data { msc, lbmp: {J,H,I}, statements, tariff }
@@ -77,7 +77,7 @@ export function buildSupply(cfg, data) {
   const warnings = [];
   const region = cfg.region === 'westchester' ? 'westchester' : 'nyc';
   const zone = cfg.zone || (region === 'nyc' ? 'J' : 'H');
-  const mfcDefault = st.merchant_function_charge_usd_per_kwh.scs5_6_8_9_12_13_total;
+  const mfcDefault = cfg.mfcDefault != null ? cfg.mfcDefault : st.merchant_function_charge_usd_per_kwh.scs5_6_8_9_12_13_total;
   const taxReimbDefault = st.msc_adjustment_factors_usd_per_kwh.tax_reimbursement_recovery_nonresidential || 0;
   const mfc = num(cfg.mfc, mfcDefault);
   const taxReimb = num(cfg.taxReimbursement, taxReimbDefault);
@@ -118,8 +118,12 @@ export function buildSupply(cfg, data) {
     for (let t = 0; t < T; t++) energyMarket[t] = lb[t] / 1000;
     capacityRate = num(cfg.capacityRate, st.msc_capacity_usd_per_kw_month[region].rider_m_icap_tag);
     components.push({ name: 'Rider M day-ahead LBMP (energy)', rate: energyMarket });
-    description = `Rider M mandatory hourly pricing: NYISO day-ahead zone ${zone} LBMP (${lbmpSource(data.lbmp[zone])}) laid onto the model year; capacity ${capacityRate.toFixed(2)} $/kW-month (Rider M ICAP tag statement value, applied to the monthly max demand - a simplification of the tag mechanism)`;
-    warnings.push('The Rider M capacity charge is really set by the customer\'s ICAP tag (demand at the NYISO peak hour of the prior year); it is applied here to each month\'s maximum demand.');
+    if (cfg.icapTag) {
+      description = `Rider M mandatory hourly pricing: NYISO day-ahead zone ${zone} LBMP (${lbmpSource(data.lbmp[zone])}) laid onto the model year; capacity ${capacityRate.toFixed(2)} $/kW-month on the ICAP tag, taken as the most the account imports in the likely NYISO peak hours (the Alternative 3 commitment hours)`;
+    } else {
+      description = `Rider M mandatory hourly pricing: NYISO day-ahead zone ${zone} LBMP (${lbmpSource(data.lbmp[zone])}) laid onto the model year; capacity ${capacityRate.toFixed(2)} $/kW-month (Rider M ICAP tag statement value, applied to the monthly max demand - a simplification of the tag mechanism)`;
+      warnings.push('The Rider M capacity charge is really set by the customer\'s ICAP tag (demand at the NYISO peak hour of the prior year); it is applied here to each month\'s maximum demand.');
+    }
   } else if (cfg.mode === 'esco_fixed') {
     const r = num(cfg.fixedRate, 0.09);
     energyMarket = new Float64Array(T).fill(r);

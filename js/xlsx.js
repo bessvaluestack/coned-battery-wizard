@@ -12,11 +12,12 @@ export function numToCol(n) {
 
 const xmlEsc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-// A cell holding a number, a string (inline) or nothing, in style `style`.
+// A cell holding a number, a boolean, a string (inline) or nothing, in style `style`.
 export function cellXml(ref, value, style) {
   const s = style != null ? ` s="${style}"` : '';
   if (value === null || value === undefined || value === '') return `<c r="${ref}"${s}/>`;
   if (typeof value === 'number') return `<c r="${ref}"${s}><v>${Number.isFinite(value) ? value : 0}</v></c>`;
+  if (typeof value === 'boolean') return `<c r="${ref}"${s} t="b"><v>${value ? 1 : 0}</v></c>`;
   return `<c r="${ref}"${s} t="inlineStr"><is><t xml:space="preserve">${xmlEsc(value)}</t></is></c>`;
 }
 

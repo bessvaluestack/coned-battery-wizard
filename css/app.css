@@ -126,6 +126,11 @@ th { font-weight: 600; color: var(--muted); font-size: 0.78rem; text-transform: 
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 0.85rem; }
 tr.total td { font-weight: 700; border-top: 2px solid var(--fg); }
 tr.sub td { color: var(--muted); }
+/* The requirements comparison on the modality step: the chosen column stands out. */
+table.reqs { min-width: 46rem; font-size: 0.84rem; line-height: 1.4; }
+table.reqs td:first-child { width: 8.5rem; }
+table.reqs th.sel, table.reqs td.sel { background: var(--accent-soft); }
+table.reqs th.sel { color: var(--accent); }
 
 .actions { display: flex; gap: 0.6rem; justify-content: space-between; align-items: center; margin-top: 1.6rem; flex-wrap: wrap; }
 .btn { border: 1px solid var(--line); background: var(--surface); padding: 0.55rem 1rem; border-radius: var(--radius); cursor: pointer; font-weight: 600; }
