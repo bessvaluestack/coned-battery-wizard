@@ -290,7 +290,7 @@ const REQUIREMENTS = [
     'Rider T CSRP and DLRP (reservation and performance) or Rider AC Term- / Auto-DLM: CSRP + DLRP, Term-DLM + DLRP, or Auto-DLM alone.',
     'An election: keep DRV and LSRV, or take Rider T (DRV and LSRV end for good) or Rider AC (suspended for the contract). Rider R customers get the reservation only, no performance payments.',
     'The same election as behind the meter with exports. Most front-of-meter batteries in Con Edison\'s programs are in Auto-DLM.'],
-  ['Interconnection',
+  ['Inter\u00adconnection',
     'NY SIR application as a non-exporting system; a study (CESIR) above 50 kW. Demand response also needs Con Edison\'s Permission to Operate.',
     'NY SIR exporting application with a CESIR. In NYC\'s network areas exports may be limited or refused; hosting capacity is tight (Con Edison\'s January 2026 notice: about 2,500 MW of storage queued, 20+ substations at or near their limits).',
     'NY SIR up to 5 MW; the CESIR runs 60 business days after the applicant commits; upgrade costs fall on the project. The same hosting-capacity constraints apply.'],

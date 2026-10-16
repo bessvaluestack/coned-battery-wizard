@@ -58,11 +58,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .mark { display: block; width: auto; height: 32px; border-radius: 4px; flex: none; }
 .top-status { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); }
 
-.shell { max-width: 1320px; margin: 0 auto; padding: 1.2rem 16px 2rem; display: grid; grid-template-columns: 210px minmax(0, 1fr) 300px; gap: 1.2rem; align-items: start; }
+.shell { max-width: 1320px; margin: 0 auto; padding: 1.2rem 16px 2rem; display: grid; grid-template-columns: 148px minmax(0, 1fr) 300px; gap: 1.2rem; align-items: start; }
 @media (max-width: 1000px) { .shell { grid-template-columns: minmax(0, 1fr); } }
 
 .stepper { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 72px); }
-.stepper button { text-align: left; background: none; border: 0; border-left: 3px solid transparent; padding: 0.55rem 0.7rem; border-radius: 0 var(--radius) var(--radius) 0; cursor: pointer; color: var(--muted); display: grid; grid-template-columns: 1.5rem 1fr; gap: 0.5rem; align-items: baseline; }
+.stepper button { text-align: left; background: none; border: 0; border-left: 3px solid transparent; padding: 0.5rem 0.55rem; border-radius: 0 var(--radius) var(--radius) 0; cursor: pointer; color: var(--muted); display: grid; grid-template-columns: 1rem 1fr; gap: 0.4rem; align-items: baseline; white-space: nowrap; }
 .stepper button .n { font-family: var(--font-mono); font-size: 0.78rem; }
 .stepper button .l { font-weight: 500; }
 .stepper button.done { color: var(--fg); }
@@ -127,8 +127,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; font-fam
 tr.total td { font-weight: 700; border-top: 2px solid var(--fg); }
 tr.sub td { color: var(--muted); }
 /* The requirements comparison on the modality step: the chosen column stands out. */
-table.reqs { min-width: 46rem; font-size: 0.84rem; line-height: 1.4; }
-table.reqs td:first-child { width: 8.5rem; }
+table.reqs { min-width: 42rem; font-size: 0.84rem; line-height: 1.4; table-layout: fixed; }
+table.reqs th:first-child, table.reqs td:first-child { width: 6.2rem; padding-left: 0; padding-right: 0.4rem; font-size: 0.8rem; }
 table.reqs th.sel, table.reqs td.sel { background: var(--accent-soft); }
 table.reqs th.sel { color: var(--accent); }
 
