@@ -149,16 +149,26 @@ node scripts/make_proforma_template.mjs doc/<workbook>.xlsx
   left. Outside the DRV window the LP caps the export credit just below the
   import price so it never buys and sells in one interval; inside it a
   battery behind a building's meter can earn more exporting than the
-  building pays importing, so a second solve fixes each window interval to
-  the side the first netted to (exact, and never worse than the first). A
-  commitment the battery cannot hold over the building's load (Alternative
-  3, LSRV) is dropped with a note. The reported credits use the real
-  prices and hourly netting.
-- Solver: `highs` 1.15.3 (`vendor/highs`, MIT) in a module worker; a full
-  year solves in 5 to 20 seconds without exports. The Value Stack solves are
-  larger: about 20 to 40 seconds for a stand-alone battery and up to two or
-  three minutes for a large one behind a building's meter (two passes),
-  twice that when an election is compared with keeping the DRV.
+  building pays importing, so each window interval is held to one side: a
+  first solve on the load's hourly averages picks the side (export where
+  the hour nets to an export and the interval's load is within the
+  battery's power), and the exact 15-minute solve follows. With the cycle
+  cap binding, or should that solve be infeasible, both passes run at 15
+  minutes (the second fixes each interval to the side the first netted to,
+  never worse than the first). A commitment the battery cannot hold over
+  the building's load (Alternative 3, LSRV) is dropped with a note. The
+  reported credits use the real prices and hourly netting.
+- Hourly solve: when the load, prices and every window are constant within
+  each hour (a stand-alone battery) the LP runs on 8,760 hours, which is
+  exact (averaging a 15-minute dispatch over each hour keeps energy, cost
+  and every window constraint and never raises a peak) and 5 to 12 times
+  faster; the solution is laid back onto the 15-minute index.
+- Solver: `highs` 1.15.3 (`vendor/highs`, MIT) in a module worker. In Node
+  on a laptop: a full year behind the meter without exports in 5 to 20
+  seconds; a stand-alone battery in about 0.5 s (4 to 6 s with a binding
+  cycle cap); behind the meter with exports 7 to 16 s (about a minute with a
+  binding cycle cap). A browser tab runs slower, and an election compared
+  with keeping the DRV doubles the time.
 
 ## Run locally
 

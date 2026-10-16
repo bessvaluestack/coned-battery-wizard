@@ -134,23 +134,29 @@ export function buildLP(inp) {
 // simplex several times slower, so solve without it first and only add the
 // cap when the free dispatch overshoots the budget. The capped solve's row
 // dual is the marginal value of one more kWh of annual discharge budget.
-export function solveWithCycleCap(highs, inputs, opts = { output_flag: false }) {
+// `capped` (an earlier solve of the same year found the cap binding, with
+// its uncapped throughput) goes straight to the capped LP.
+export function solveWithCycleCap(highs, inputs, opts = { output_flag: false }, capped = null) {
   const cap = +inputs.battery.cyclesPerYear || 0;
   const E = +inputs.battery.kwh || 0;
   const timing = {};
   const dt = inputs.dt;
   const sumDis = (r) => { let s = 0; for (let t = 0; t < r.dis.length; t++) s += r.dis[t]; return s * dt; };
-  const free = { ...inputs, battery: { ...inputs.battery, cyclesPerYear: 0 } };
-  let t0 = performance.now();
-  const lp1 = buildLP(free);
-  const sol1 = highs.solve(lp1, opts);
-  if (sol1.Status !== 'Optimal') throw new Error(`solver status ${sol1.Status}`);
-  const r1 = extractSolution(sol1, free);
-  timing.uncappedMs = performance.now() - t0;
-  const thr1 = sumDis(r1);
-  r1.cycleInfo = { capped: false, binding: false, throughputKwh: thr1, capKwh: cap * E, marginalUsdPerKwh: 0 };
-  r1.timing = timing;
-  if (!(cap > 0 && E > 0 && thr1 > cap * E * 1.0005)) return r1;
+  let t0 = performance.now(), thr1;
+  if (capped && cap > 0 && E > 0) {
+    thr1 = capped.uncappedThroughputKwh;
+  } else {
+    const free = { ...inputs, battery: { ...inputs.battery, cyclesPerYear: 0 } };
+    const lp1 = buildLP(free);
+    const sol1 = highs.solve(lp1, opts);
+    if (sol1.Status !== 'Optimal') throw new Error(`solver status ${sol1.Status}`);
+    const r1 = extractSolution(sol1, free);
+    timing.uncappedMs = performance.now() - t0;
+    thr1 = sumDis(r1);
+    r1.cycleInfo = { capped: false, binding: false, throughputKwh: thr1, capKwh: cap * E, marginalUsdPerKwh: 0 };
+    r1.timing = timing;
+    if (!(cap > 0 && E > 0 && thr1 > cap * E * 1.0005)) return r1;
+  }
   t0 = performance.now();
   const lp2 = buildLP(inputs);
   const sol2 = highs.solve(lp2, opts);
@@ -158,7 +164,7 @@ export function solveWithCycleCap(highs, inputs, opts = { output_flag: false }) 
   const r2 = extractSolution(sol2, inputs);
   timing.cappedMs = performance.now() - t0;
   const row = (sol2.Rows || []).find((r) => r.Name === 'cyc');
-  r2.cycleInfo = { capped: true, binding: true, throughputKwh: sumDis(r2), capKwh: cap * E, uncappedThroughputKwh: thr1,
+  r2.cycleInfo = { capped: true, binding: sumDis(r2) >= cap * E * 0.9995, throughputKwh: sumDis(r2), capKwh: cap * E, uncappedThroughputKwh: thr1,
     marginalUsdPerKwh: row && typeof row.Dual === 'number' ? Math.max(0, -row.Dual) : null };
   r2.timing = timing;
   return r2;
@@ -170,24 +176,142 @@ export function solveWithCycleCap(highs, inputs, opts = { output_flag: false }) 
 // netted to. The meter only sees the net, so a first-pass interval that both
 // imports and exports is not a dispatch the credits would pay; fixed, the
 // second pass is exact, and the first-pass dispatch stays feasible in it.
+// When every input is constant within each hour (a stand-alone battery: no
+// load, hourly prices, hour-aligned windows) the hourly LP is exact: averaging
+// a 15-minute dispatch over each hour keeps energy, cost and every window
+// constraint and never raises a peak. It is a quarter of the size, so solve
+// that and lay the result back onto the 15-minute index.
+//
+// Behind a building's meter the load moves within the hour, so the hourly LP
+// is not exact; but the first of the two passes (see solveExact) only picks
+// each DRV-window interval's side, so it runs on the hourly average and the
+// exact 15-minute pass follows. Should that pass be infeasible, both passes
+// run at 15 minutes.
 export function solveScenario(highs, inputs, opts) {
-  let r1;
+  const hourly = toHours(inputs);
+  if (hourly) {
+    const t0 = performance.now();
+    const r = fromHours(solveExact(highs, hourly, opts), inputs);
+    r.timing = { ...r.timing, hourly: true, hourlyMs: performance.now() - t0 };
+    return r;
+  }
+  if (inputs.exports && inputs.exports.washCheck) {
+    try {
+      return solveTwoPass(highs, inputs, opts);
+    } catch (e) {
+      if (!/Infeasible/.test(e.message)) throw e;
+    }
+  }
+  return solveExact(highs, inputs, opts);
+}
+
+// A solve that drops the Alternative 3 and LSRV commitments when the battery
+// cannot hold them (the LP is infeasible) and says so.
+function solveDropping(highs, inputs, opts, capped) {
   try {
-    r1 = solveWithCycleCap(highs, inputs, opts);
+    const r = solveWithCycleCap(highs, inputs, opts, capped);
+    r.inputs = inputs;
+    return r;
   } catch (e) {
-    // A commitment the battery cannot hold makes the LP infeasible: drop the
-    // Alternative 3 and LSRV commitments and say so.
     const X0 = inputs.exports;
     if (!X0 || !(X0.alt3 || X0.lsrv) || !/Infeasible/.test(e.message)) throw e;
     inputs = { ...inputs, exports: { ...X0, alt3: null, lsrv: null, dropped: [...(X0.dropped || []), 'The capacity and LSRV commitments could not be held with this battery and were dropped.'] } };
-    r1 = solveWithCycleCap(highs, inputs, opts);
-    r1.dropped = inputs.exports.dropped;
+    const r = solveWithCycleCap(highs, inputs, opts, capped);
+    r.dropped = inputs.exports.dropped;
+    r.inputs = inputs;
+    return r;
   }
+}
+
+// The fixed second pass: each DRV-window interval to the side `exporting(t)` says.
+function fixedPass(highs, inputs, opts, exporting, capped) {
+  const X = inputs.exports, fixImportZero = [], fixExportZero = [];
+  for (const t of X.washCheck) (exporting(t) ? fixImportZero : fixExportZero).push(t);
+  return solveWithCycleCap(highs, { ...inputs, exports: { ...X, fixImportZero: Int32Array.from(fixImportZero), fixExportZero: Int32Array.from(fixExportZero) } }, opts, capped);
+}
+
+function solveTwoPass(highs, inputs, opts) {
+  const t0 = performance.now();
+  const approx = toHours(inputs, true);
+  const r1 = solveDropping(highs, approx, opts);
+  const firstMs = performance.now() - t0;
+  // With the cycle cap binding, sides fixed from hourly averages can leave the
+  // capped 15-minute LP barely feasible (slow, and worse): use both 15-minute passes.
+  if (r1.cycleInfo.binding) {
+    const r = solveExact(highs, inputs, opts, r1.cycleInfo);
+    r.timing = { ...r.timing, hourlyProbeMs: firstMs };
+    return r;
+  }
+  const S = stepsPerHour(inputs), P = +inputs.battery.kw;
+  // Export where the hour netted to an export and the interval's load is
+  // within the battery's power; import everywhere else.
+  const exporting = (t) => { const h = Math.floor(t / S); return r1.dis[h] - r1.ch[h] > approx.load[h] + 1e-6 && inputs.load[t] < P - 1e-6; };
+  const pass2 = r1.dropped ? { ...inputs, exports: { ...inputs.exports, alt3: null, lsrv: null, dropped: r1.dropped } } : inputs;
+  const r2 = fixedPass(highs, pass2, opts, exporting, r1.cycleInfo.binding ? r1.cycleInfo : null);
+  r2.timing = { ...r2.timing, firstPassMs: firstMs, firstPassHourly: true };
+  r2.dropped = r1.dropped;
+  return r2;
+}
+
+const stepsPerHour = (inp) => Math.round(1 / inp.dt);
+
+// The hourly LP inputs, or null if any series varies within an hour or any
+// interval set covers part of an hour.
+// With `approximate`, the load (and any series) is averaged over the hour
+// instead: for a first pass only.
+export function toHours(inp, approximate = false) {
+  const S = stepsPerHour(inp), T = inp.load.length;
+  if (S <= 1 || T % S) return null;
+  const H = T / S;
+  const flat = (a) => {
+    if (!a || typeof a === 'number') return true;
+    for (let h = 0; h < H; h++) for (let k = 1; k < S; k++) if (Math.abs(a[h * S + k] - a[h * S]) > 1e-9) return false;
+    return true;
+  };
+  const X = inp.exports;
+  if (!approximate && (!flat(inp.load) || !flat(inp.price) || (X && !flat(X.price)))) return null;
+  let partial = false;
+  const hours = (list) => {
+    if (!list) return list;
+    const n = new Map();
+    for (const t of list) { const h = Math.floor(t / S); n.set(h, (n.get(h) || 0) + 1); }
+    for (const c of n.values()) if (c !== S) partial = true;
+    return Int32Array.from([...n.keys()].sort((a, b) => a - b));
+  };
+  const every = (a) => Float64Array.from({ length: H }, (_, h) => { let v = 0; for (let k = 0; k < S; k++) v += a[h * S + k]; return v / S; });
+  const out = {
+    ...inp, load: every(inp.load), price: every(inp.price), dt: inp.dt * S, demandIntervalMin: 15,
+    peakTerms: inp.peakTerms.map((k) => ({ ...k, idx: hours(k.idx) })),
+    programs: inp.programs && inp.programs.map((pg) => ({ ...pg, allIntervals: hours(pg.allIntervals), performanceIntervals: hours(pg.performanceIntervals), events: pg.events.map((e) => ({ intervals: hours(e.intervals) })) })),
+    exports: X && {
+      ...X, price: every(X.price), leDis: hours(X.leDis), noCharge: hours(X.noCharge), fixImportZero: hours(X.fixImportZero), fixExportZero: hours(X.fixExportZero), washCheck: hours(X.washCheck),
+      alt3: X.alt3 && { ...X.alt3, intervals: hours(X.alt3.intervals) }, lsrv: X.lsrv && { ...X.lsrv, events: X.lsrv.events.map(hours) },
+    },
+  };
+  return partial && !approximate ? null : out;
+}
+
+// An hourly solution on the 15-minute index: flows repeat within the hour,
+// the state of charge moves linearly between hour starts.
+export function fromHours(r, inp) {
+  const S = stepsPerHour(inp), T = inp.load.length, H = T / S;
+  const rep = (a) => Float64Array.from({ length: T }, (_, t) => a[Math.floor(t / S)]);
+  const soc = Float64Array.from({ length: T }, (_, t) => { const h = Math.floor(t / S), f = (t % S) / S; return r.soc[h] + f * (r.soc[(h + 1) % H] - r.soc[h]); });
+  const spread = (byHour) => { const o = {}; for (const [h, v] of Object.entries(byHour)) for (let k = 0; k < S; k++) o[+h * S + k] = v; return o; };
+  return {
+    ...r, imp: rep(r.imp), exp: rep(r.exp), ch: rep(r.ch), dis: rep(r.dis), soc,
+    programs: r.programs.map((p) => ({ ...p, r: spread(p.r) })),
+    washIntervals: r.washIntervals.flatMap((h) => Array.from({ length: S }, (_, k) => h * S + k)),
+  };
+}
+
+function solveExact(highs, inputs, opts, capped = null) {
+  const r1 = solveDropping(highs, inputs, opts, capped);
+  inputs = r1.inputs;
+  delete r1.inputs;
   const X = inputs.exports;
   if (!X || !X.washCheck || !r1.washIntervals.length) return r1;
-  const fixImportZero = [], fixExportZero = [];
-  for (const t of X.washCheck) (r1.dis[t] - r1.ch[t] >= inputs.load[t] ? fixImportZero : fixExportZero).push(t);
-  const r2 = solveWithCycleCap(highs, { ...inputs, exports: { ...X, fixImportZero: Int32Array.from(fixImportZero), fixExportZero: Int32Array.from(fixExportZero) } }, opts);
+  const r2 = fixedPass(highs, inputs, opts, (t) => r1.dis[t] - r1.ch[t] >= inputs.load[t], r1.cycleInfo.binding ? r1.cycleInfo : null);
   r2.timing = { ...r2.timing, firstPassMs: (r1.timing.uncappedMs || 0) + (r1.timing.cappedMs || 0), firstPassWash: r1.washIntervals.length };
   r2.dropped = r1.dropped;
   return r2;

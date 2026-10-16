@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import loadHighs from '../vendor/highs/highs.mjs';
 import { buildStack, billFor, lpInputs, chargingAccount, tariffFor } from '../js/model.js';
-import { solveScenario } from '../js/lp.js';
+import { solveScenario, solveWithCycleCap, toHours } from '../js/lp.js';
 import { buildValueStack, drvIntervals, valueStackCredits } from '../js/valuestack.js';
 import { buildPrograms } from '../js/programs.js';
 import { peakGroups, makeCharge } from '../js/tariff.js';
@@ -95,4 +95,21 @@ test('stand-alone battery: exports only from discharge, no charging in the DRV w
   assert.ok(c.totals.drv > 0 && c.totals.energy > 0);
   const bill = billFor(stack, sol.imp);
   assert.ok(c.total > bill.total, 'credits beat the charging bill');
+});
+
+test('hourly solve: exact for a stand-alone battery, not used for a 15-minute building load', async () => {
+  const highs = await loadHighs();
+  const battery = { kw: 250, kwh: 1000, rte: 0.88, usableFrac: 0.95, cyclesPerYear: 0, throughputCost: 0 };
+  const cfg = { modality: 'ftm', account: chargingAccount({ modality: 'ftm', rateNo: 3, voltage: 'lt', batteryKw: 250 }), region: 'nyc', zone: 'J', demandIntervalMin: 30, taxPct: 2.5,
+    supply: { mode: 'coned_mhp' }, valueStack: { election: 'value_stack', network: 'YORKVILLE', lsrv: true, alt3: { hours: [15, 18], days: 10 } } };
+  const stack = buildStack(cfg, data);
+  const inp = lpInputs(stack, new Float64Array(idx.T), battery, false);
+  assert.ok(toHours(inp));
+  const hourly = solveScenario(highs, inp), quarter = solveWithCycleCap(highs, inp);
+  assert.ok(hourly.timing.hourly);
+  assert.ok(Math.abs(hourly.objective - quarter.objective) < 1e-5 * Math.abs(quarter.objective), `${hourly.objective} vs ${quarter.objective}`);
+  for (let t = 0; t < idx.T; t += 997) assert.equal(hourly.dis[t], hourly.dis[t - (t % 4)]);
+  const building = lpInputs(buildStack({ ...cfg, modality: 'btm_vs', account: { sc: 8, rateNo: 1, voltage: 'lt', standby: false } }, data), Float64Array.from(read('profiles/midrise_gas_windowac.json').kw), battery, false);
+  assert.equal(toHours(building), null);
+  assert.ok(toHours(building, true).load.length === idx.T / 4);
 });

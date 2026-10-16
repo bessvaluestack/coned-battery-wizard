@@ -768,7 +768,7 @@ async function run() {
     }
     const withPrograms = stack.programs.programs.some((p) => p.events.length);
     const show = (msg) => { box.innerHTML = `<div class="progress">${msg}<div class="bar"><i></i></div></div>`; };
-    show(edition.SOLVING + (stack.valueStack ? ' With exports the year has more to optimise: allow up to two or three minutes for a large battery behind the meter, and twice that for an election compared with the DRV.' : ''));
+    show(edition.SOLVING + (stack.valueStack && state.modality === 'btm_vs' ? ' Behind the meter with exports the year takes two solves: allow up to a minute, more with a tight cycle limit, and twice that for an election compared with the DRV.' : ''));
     const t0 = performance.now();
     const inp = lpInputs(stack, load.kw, battery, withPrograms);
     const sol = await solveDispatch(inp);
@@ -910,6 +910,8 @@ function resultsValueStack(R) {
     `Alternative 3: the battery holds ${fmtN(C.alt3Kw, 1)} kW of net injection through ${vs.alt3.hours[0]}:00 to ${vs.alt3.hours[1]}:00 on ${vs.alt3.days.length} top-priced July and August weekdays, standing in for the unknown NYCA peak hour; Con Edison estimates a new project's first-year kW.`,
     ...dropped.map(esc),
     ...(vs.drv ? ['No charging and no grid pass-through in the DRV window; outside it the export credit is capped just under the import price in the optimisation (the credits shown use the real prices).'] : []),
+    ...(R.sol.timing && R.sol.timing.hourly ? ['Solved hour by hour: with no load and prices and windows constant within each hour, the hourly dispatch is exactly as good as a 15-minute one.'] : []),
+    ...(R.sol.timing && R.sol.timing.firstPassHourly ? ['Behind the meter a first solve on hourly averages picked each DRV-window interval\'s side (import or export); the 15-minute solve then held each to it, so no interval both imports and exports.'] : []),
     ...(R.sol.timing && R.sol.timing.firstPassWash ? [`Behind the meter the first solve both imported and exported in ${R.sol.timing.firstPassWash} window intervals; a second solve fixed each to its net side.`] : []),
     `Perfect-foresight dispatch over the model year (2027 calendar, DST ignored); cyclic state of charge; ${S.cycles.toFixed(0)} equivalent full cycles${S.cycleLimit ? ` of the ${S.cycleLimit} allowed` : ''}.` + cycleNote(R),
     ...vs.notes.map(esc), ...(R.stack.programs.notes || []).map(esc),
