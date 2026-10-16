@@ -334,7 +334,7 @@ function rateCard(stack) {
   const t = stack.tariff;
   const unit = (c) => (c.period === 'day' ? '$/kW-day' : '$/kW-mo');
   const what = (c) => (c.period === 'year' ? 'contract demand' : c.period === 'day' ? 'daily as-used demand' : 'monthly demand');
-  const demandRows = stack.ta.demandCharges.map((c) => `<tr><td>${esc(c.name.replace(/_/g, ' '))} (${what(c)})</td><td>${c.months.length === 12 ? 'all year' : c.months.map((m) => MONTH_NAMES[m - 1]).join(', ')}</td><td>${c.days}${c.hours ? `, ${c.hours[0]}:00 to ${c.hours[1]}:00` : ', all hours'}</td><td class="num">${c.rate.toFixed(c.period === 'day' ? 4 : 2)} ${unit(c)}</td></tr>`).join('');
+  const demandRows = stack.ta.demandCharges.map((c) => `<tr><td>${esc(c.name.replace(/_/g, ' '))} (${what(c)})</td><td>${c.months.length === 12 ? 'all year' : c.months.map((m) => MONTH_NAMES[m - 1]).join(', ')}</td><td>${c.days === 'all' ? 'all days' : c.days}${c.hours ? `, ${c.hours[0]}:00 to ${c.hours[1]}:00` : ', all hours'}</td><td class="num">${c.rate.toFixed(c.period === 'day' ? 4 : 2)} ${unit(c)}</td></tr>`).join('');
   const energyRows = t.energy.seasons.map((se) => se.tou.map((w) => `<tr><td>Delivery energy${t.energy.seasons.length > 1 ? ` (${esc(se.name.replace(/_/g, ' '))})` : ''}</td><td>${se.months.length === 12 ? 'all year' : se.months.map((m) => MONTH_NAMES[m - 1]).join(', ')}</td><td>${w.hours ? `${w.hours[0]}:00 to ${w.hours[1]}:00` : 'all hours'}</td><td class="num">${(+w.rate).toFixed(4)} $/kWh</td></tr>`).join('')).join('');
   return `
     <h3>Rate card: ${esc(t.name)}</h3>
