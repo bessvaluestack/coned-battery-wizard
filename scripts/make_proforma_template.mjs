@@ -14,6 +14,8 @@
 //   - the cells the app fills become blue input cells: Value_Streams billing
 //     peaks (C:D) and demand savings (G), Hourly_Operations energy rate (H);
 //   - notes saying where the filled numbers come from;
+//   - the source's sample project removed from Inputs (and its strings from
+//     the shared string table);
 //   - cached formula results and calcChain removed, full recalc on open;
 //   - author and local-path metadata removed.
 
@@ -169,6 +171,16 @@ ho = ho.replace(/<c r="H(\d+)"[^>]*?(?:\/>|>.*?<\/c>)/gs, (m, r) => (+r >= 6 && 
 ho = setCells(ho, { B3: 'Filled by the SC 8 Battery Wizard: D baseline and E dispatch are hourly averages of its 15-minute run (positive = discharge); H is the all-in energy rate for the hour, taxes included.' });
 write(sheetPath('Hourly_Operations'), ho);
 
+// Inputs: no sample project. Project values, the cells the app fills, the
+// analysis period and the discount rate are left blank; replacement, O&M,
+// escalation and resiliency take the zero ("none") defaults their notes give.
+const inputCells = (...ranges) => ranges.flatMap((r) => {
+  const [a, b = a] = r.split(':').map((c) => +c.slice(1));
+  return Array.from({ length: b - a + 1 }, (_, i) => `C${a + i}`);
+});
+const blank = Object.fromEntries(inputCells('C6:C10', 'C16:C25', 'C32:C38', 'C42:C43', 'C48:C52').map((ref) => [ref, null]));
+write(sheetPath('Inputs'), setCells(sheet('Inputs'), { ...blank, C26: 0, C27: 0, C28: 0, C29: 0, C46: 'Flat annual', C47: 0 }));
+
 // Utility_Rates: say what the filled rates are.
 let ur = sheet('Utility_Rates');
 ur = ur.replace(/<dimension ref="[^"]+"/, '<dimension ref="A1:K57"');
@@ -176,6 +188,13 @@ ur = appendRow(ur, 57, cellXml('B57', 'When filled by the SC 8 Battery Wizard: D
 write(sheetPath('Utility_Rates'), ur);
 
 for (const name of Object.keys(SHEETS)) write(sheetPath(name), dropCachedValues(sheet(name)));
+
+// Shared strings no cell uses any more (the sample's names) are emptied in
+// place, so the indexes the remaining cells hold stay valid.
+const used = new Set();
+for (const name of Object.keys(SHEETS)) for (const [, i] of sheet(name).matchAll(/<c [^>]*?t="s"[^>]*>(?:<f[^>]*?(?:\/>|>[^<]*<\/f>))?<v>(\d+)<\/v>/g)) used.add(+i);
+let si = -1;
+write('xl/sharedStrings.xml', read('xl/sharedStrings.xml').replace(/<si>.*?<\/si>/gs, (m) => (used.has(++si) ? m : '<si><t></t></si>')));
 
 // Recalculate on open; calcChain would name cells that no longer hold formulas.
 delete files['xl/calcChain.xml'];

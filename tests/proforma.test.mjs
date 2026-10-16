@@ -26,6 +26,20 @@ test('template: recalculates on open, no calc chain, no author or local path, no
   for (const [p, bytes] of Object.entries(files)) if (/\.xml$|\.rels$/.test(p)) assert.deepEqual(bannedWords(strFromU8(bytes)), [], p);
 });
 
+test('template: no sample project; zero where the notes say "none"', () => {
+  const files = unzipSync(template);
+  const inputs = strFromU8(files['xl/worksheets/sheet1.xml']);
+  for (const ref of ['C6', 'C7', 'C8', 'C9', 'C10', 'C16', 'C22', 'C23', 'C25', 'C32', 'C38', 'C42', 'C43', 'C48', 'C52']) assert.equal(cell(inputs, ref), '', ref);
+  for (const ref of ['C26', 'C27', 'C28', 'C29', 'C47']) assert.equal(num(inputs, ref), 0, ref);
+  assert.match(cell(inputs, 'C46'), /Flat annual/);
+  // Every shared string left with text is one some cell still uses.
+  const used = new Set();
+  for (const [p, bytes] of Object.entries(files)) if (/^xl\/worksheets\/sheet\d+\.xml$/.test(p)) for (const [, i] of strFromU8(bytes).matchAll(/t="s"[^>]*><v>(\d+)<\/v>/g)) used.add(+i);
+  [...strFromU8(files['xl/sharedStrings.xml']).matchAll(/<si>(.*?)<\/si>/gs)].forEach(([, s], i) => {
+    if (!used.has(i)) assert.equal(s.replace(/<[^>]+>/g, ''), '', `shared string ${i}`);
+  });
+});
+
 test('fill: hourly profiles, rates, savings and program revenue land in their cells', () => {
   const stack = buildStack({ rateNo: 1, voltage: 'lt', region: 'nyc', zone: 'J', demandIntervalMin: 15, taxPct: 2.5, supply: { mode: 'coned_msc' } }, data);
   const load = Float64Array.from(read('profiles/midrise_gas_windowac.json').kw);
@@ -37,11 +51,15 @@ test('fill: hourly profiles, rates, savings and program revenue land in their ce
   const revenue = { total: 3000, streams: [{ id: 'csrp', reservation: 2500, performance: 500, eventKw: [50, 75], eventDays: ['7/14', '8/3'], hours: [14, 18], terms: { performanceRate: 1 } }] };
   const summary = summarize(stack, load, battery, base, withB, null, null, sol, revenue);
   const months = Array.from({ length: 12 }, (_, m) => 10000 + m * 100);
-  const d = proformaData({ stack, load, sol, summary, revenue, battery }, { rateLabel: 'SC 8 Rate I LT', programMonths: { csrp: [5, 6, 7, 8, 9] }, monthlyBills: months });
+  const run = { stack, load, sol, summary, revenue, battery };
+  const d = proformaData(run, { rateLabel: 'SC 8 Rate I LT', programMonths: { csrp: [5, 6, 7, 8, 9] }, monthlyBills: months, installedCost: 400000 });
   const files = unzipSync(fillProforma(template, d));
   const [inputs, rates, hourly, vs] = [1, 2, 3, 4].map((n) => strFromU8(files[`xl/worksheets/sheet${n}.xml`]));
 
   assert.equal(num(inputs, 'C16'), 100);
+  // The installed cost is all-in: first capital line, the rest zero; none entered leaves them blank.
+  assert.deepEqual(['C32', 'C33', 'C34', 'C35', 'C36', 'C37', 'C38'].map((r) => num(inputs, r)), [400000, 0, 0, 0, 0, 0, 0]);
+  assert.ok(!('C32' in proformaData(run, { rateLabel: '' }).inputs));
   assert.match(cell(inputs, 'C10'), /SC 8 Rate I LT/);
   // Every hour filled; baseline minus dispatch is the hour's mean import.
   assert.equal((hourly.match(/<c r="H\d+" s="34"><v>/g) || []).length, 8760);

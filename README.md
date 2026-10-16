@@ -54,8 +54,14 @@ program revenue stream added; the results page fills it in the browser
   workbook's own formulas give arbitrage savings, which match the run.
 - Utility_Rates: effective monthly rates for its readiness checks and bill
   reconciliation, and the monthly bills when they were entered.
-- Inputs: utility, rate and battery specs. Capital, O&M, analysis period,
-  discount rate and resiliency stay as in the template for the user to set.
+- Inputs: utility, rate and battery specs, and the installed cost when one
+  was entered (all-in, on the battery system line; the other capital lines
+  are set to 0). The template carries no sample project: building details,
+  capital costs, analysis period and discount rate are blank, and
+  replacement, O&M, escalation and resiliency are zero (flat annual), for
+  the user to set. The returns stay empty until the capital costs, analysis
+  period and discount rate are all in (the model status names what is
+  missing); the savings sheets fill regardless.
 
 Excel recalculates on open (the template carries no cached results). To
 rebuild the template after the source workbook (kept out of git in `doc/`,

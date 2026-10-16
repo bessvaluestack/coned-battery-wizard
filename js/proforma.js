@@ -1,7 +1,8 @@
 // The owner pro-forma (templates/proforma.xlsx, built by
 // scripts/make_proforma_template.mjs) filled from a run: the hourly profiles,
-// the savings and the program revenue. Capital, O&M, finance and resiliency
-// inputs are left as they are in the template for the user to set.
+// the savings and the program revenue, plus the installed cost when one was
+// entered. O&M, finance and resiliency inputs are left as the template has
+// them (blank, or zero for "none") for the user to set.
 import { unzipSync, zipSync, strFromU8, strToU8 } from '../vendor/fflate/fflate.mjs';
 import { setCells, fillRows } from './xlsx.js';
 import { STEPS_PER_HOUR, DT_HOURS } from './timeidx.js';
@@ -16,9 +17,9 @@ const COLS = (from, n) => Array.from({ length: n }, (_, i) => String.fromCharCod
 /**
  * Everything the workbook needs from a run.
  * @param run  { stack, load (kW, 15-min), sol, summary, revenue, battery }
- * @param opts { rateLabel, programMonths: { csrp: [5..9], ... }, monthlyBills: [12] | null }
+ * @param opts { rateLabel, programMonths: { csrp: [5..9], ... }, monthlyBills: [12] | null, installedCost ($) }
  */
-export function proformaData({ stack, load, sol, summary, revenue, battery }, { rateLabel, programMonths = {}, monthlyBills = null }) {
+export function proformaData({ stack, load, sol, summary, revenue, battery }, { rateLabel, programMonths = {}, monthlyBills = null, installedCost = 0 }) {
   const idx = stack.idx, tf = stack.taxFactor, hours = idx.T / STEPS_PER_HOUR;
 
   // Hourly averages. kW go in at 0.1 W so that baseline minus dispatch (the
@@ -46,6 +47,11 @@ export function proformaData({ stack, load, sol, summary, revenue, battery }, { 
 
   const inputs = { C9: 'Con Edison', C10: rateLabel, C16: battery.kw, C17: battery.kwh, C18: battery.usableFrac, C19: 1 - battery.usableFrac, C20: 1, C21: battery.rte };
   if (battery.cyclesPerYear > 0) inputs.C23 = battery.cyclesPerYear;
+  // The installed cost is all-in: it goes on the first capital line, the rest are zero.
+  if (installedCost > 0) {
+    Object.assign(inputs, { C32: installedCost, C33: 0, C34: 0, C35: 0, C36: 0, C37: 0, C38: 0 });
+    inputs.E32 = 'All-in installed cost from the SC 8 Battery Wizard; the lines below are 0. Split it across them if you have a breakdown.';
+  }
   const rates = {}, valueStreams = {};
   summary.monthly.forEach((m, i) => {
     const r = FIRST_ROW + i;

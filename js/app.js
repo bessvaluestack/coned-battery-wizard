@@ -498,7 +498,7 @@ async function stepBattery() {
       ${field('Usable depth of discharge', numInput('battery.usable', B.usable, { step: 1, min: 10, max: 100, unit: '%' }), 'Share of nameplate the controller may use.')}
       ${field('Annual cycle limit', numInput('battery.cycles', B.cycles, { step: 1, min: 0, unit: 'cycles / yr' }), 'Equivalent full cycles of discharged energy per year (warranty cap). 0 = unlimited.')}
       ${field('Throughput cost', numInput('battery.throughputCost', B.throughputCost, { step: 0.001, min: 0, unit: '$/kWh' }), 'Optional degradation charge per kWh discharged; stops cycling for pennies.')}
-      ${field('Installed cost (optional)', numInput('battery.capexK', B.capexK, { step: 1, min: 0, unit: 'k$', nullable: true }), 'Thousands of dollars. Only used for a simple payback figure.')}
+      ${field('Installed cost (optional)', numInput('battery.capexK', B.capexK, { step: 1, min: 0, unit: 'k$', nullable: true }), 'Thousands of dollars. Used for a simple payback figure and as the pro-forma\'s capital cost.')}
     </div>
     ${pledgeFlags()}
     <div id="runBox"></div>
@@ -680,6 +680,7 @@ function afterResults() {
         rateLabel: `SC 8 Rate ${roman[state.rateNo]} ${state.voltage.toUpperCase()}, ${state.region === 'nyc' ? 'NYC' : 'Westchester'} (zone ${R.stack.supply.zone}); ${SUPPLY_MODES[state.supply.mode]}`,
         programMonths,
         monthlyBills: R.load.source === 'bill' && L.billMode === 'monthly' && L.monthlyBills ? L.monthlyBills : null,
+        installedCost: (+state.battery.capexK || 0) * 1000,
       });
       download('sc8_battery_proforma.xlsx', fillProforma(template, d), XLSX_TYPE);
     } catch (err) {
