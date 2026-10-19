@@ -1,0 +1,66 @@
+# The wizard with saved projects on one machine:
+#   web  Caddy: HTTPS, the team login, the client build, /api -> api
+#   api  Node: the projects API, migrations applied at start
+#   db   Postgres 17: projects and their revisions (volume pgdata)
+# Only web is published (80, 443); api and db live on internal networks.
+#
+#   cd deploy && docker compose up -d --build
+name: coned-battery-wizard
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: wizard
+      POSTGRES_USER: wizard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wizard -d wizard"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [backend]
+
+  api:
+    build: ../server
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://wizard:${POSTGRES_PASSWORD}@db:5432/wizard
+      PORT: "3000"
+      LOG_LEVEL: info
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [backend, frontend]
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in deploy/.env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in deploy/.env}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    volumes:
+      - ./users.caddy:/etc/caddy/users.caddy:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [api]
+    networks: [frontend]
+
+networks:
+  backend:
+    internal: true
+  frontend: {}
+
+volumes:
+  pgdata: {}
+  caddy_data: {}
+  caddy_config: {}

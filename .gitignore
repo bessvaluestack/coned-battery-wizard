@@ -3,3 +3,8 @@ node_modules/
 *.log
 dist/
 doc/
+
+# The server deployment (secrets and data)
+deploy/.env
+deploy/users.caddy
+deploy/backups/

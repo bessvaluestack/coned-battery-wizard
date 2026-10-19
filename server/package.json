@@ -1,0 +1,23 @@
+{
+  "name": "coned-battery-wizard-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Saved, shared projects for the Con Edison Battery Wizard",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "fastify": "5.12.7",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.10"
+  }
+}

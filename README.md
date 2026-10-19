@@ -92,6 +92,17 @@ Wizard_Import sheet, so the financial model can always tell which analysis
 its numbers came from. Shared, server-side projects are the next step (see
 *Hosting*, planned).
 
+## Saved projects server (proof of concept)
+
+`server/` is a small Node API (Fastify, Postgres) that stores projects as the
+wizard's project files, every save a revision: `GET/POST /api/projects`,
+`GET/PUT /api/projects/:id` (with `?baseRev=` to refuse a stale save),
+`GET /api/projects/:id/revisions[/:rev]`. `deploy/` runs it on one machine
+with Docker Compose behind Caddy (HTTPS, a team login that also records who
+saved each revision) together with the client build; `deploy/README.md` is
+the step-by-step setup. Tests: `npm test --prefix server` (an in-memory
+Postgres). The wizard's project bar does not use the API yet.
+
 ## Owner pro-forma (XLSX)
 
 The wizard writes two places only: a protected **Wizard_Import** sheet and

@@ -25,6 +25,7 @@ jobs:
         with:
           node-version: 24
       - run: npm test
+      - run: npm ci --prefix server && npm test --prefix server
       - run: node scripts/build.mjs --client
       - uses: actions/upload-pages-artifact@v4
         with:

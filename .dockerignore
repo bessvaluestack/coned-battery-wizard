@@ -1,0 +1,11 @@
+# The web image builds the client edition from the source tree only.
+.git
+.github
+node_modules
+server
+deploy/.env
+deploy/users.caddy
+deploy/backups
+dist
+doc
+*.log
