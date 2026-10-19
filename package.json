@@ -1,6 +1,6 @@
 {
   "name": "coned-battery-wizard",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Browser-only wizard: behind-the-meter battery savings for a Con Edison SC 8 multifamily building",

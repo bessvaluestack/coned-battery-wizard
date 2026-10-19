@@ -79,7 +79,35 @@ the Value Stack modalities pick an election instead of the riders.
    the account's bill, and for a Rider T / Rider AC election what keeping
    the DRV and LSRV would have earned (a second solve).
 
+## Projects
+
+One project at a time (`js/project.js`): a name and a stable project ID in
+the header, kept in the browser with the inputs. **Save project** downloads
+a project file (`<name>.coned-battery.json`: format, version, the project,
+every input, and an uploaded interval profile if there is one); **Open
+project** loads one back; **New project** starts over with a new ID. The
+project ID, a fingerprint of the configuration (it changes whenever an
+input does) and the run time go into the results JSON and the pro-forma's
+Wizard_Import sheet, so the financial model can always tell which analysis
+its numbers came from. Shared, server-side projects are the next step (see
+*Hosting*, planned).
+
 ## Owner pro-forma (XLSX)
+
+The wizard writes two places only: a protected **Wizard_Import** sheet and
+the 8,760 hourly rows. Wizard_Import (`js/wizardsheet.js` defines the layout,
+the interface between the wizard and the financial model: add rows or
+blocks, never move a cell) holds the project (ID, name, configuration
+fingerprint, run time, wizard version, rates date, modality, account,
+supply, programs, load), the battery (the source of truth: kW, kWh,
+efficiency, usable share, cycle limit, Year 1 cycles), the Year 1 summary,
+the monthly bill baseline and with the battery (kWh, billing peaks, demand,
+energy and fixed $, effective $/kW and $/kWh, savings), program revenue by
+program and month with each program's terms, Value Stack credits by month,
+every demand determinant and rate by charge and month, and energy by
+component. The model's battery cells (Inputs C9:C10, C14, C16:C21, C23),
+savings cells (Value_Streams C:D, G, K, M:N) and rates (Utility_Rates C, F:J)
+are green links to it, so the battery is set in the wizard only.
 
 `templates/proforma.xlsx` is the owner's multifamily storage workbook with a
 program revenue stream and Value Stack streams added; the results page fills

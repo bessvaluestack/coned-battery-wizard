@@ -57,6 +57,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .brand p { margin: 0; color: var(--muted); font-size: 0.85rem; }
 .mark { display: block; width: auto; height: 32px; border-radius: 4px; flex: none; }
 .top-status { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); }
+/* The project bar: name, id, save / open / new. */
+.project { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-left: auto; }
+.project input[type="text"] { width: 15rem; max-width: 100%; padding: 0.35rem 0.55rem; font-size: 0.88rem; }
+.project .pid { font-family: var(--font-mono); font-size: 0.75rem; color: var(--muted); }
+.project .msg { font-size: 0.8rem; color: var(--muted); flex-basis: 100%; text-align: right; }
+@media (max-width: 700px) { .project { margin-left: 0; width: 100%; } .project input[type="text"] { flex: 1; } .project .msg { text-align: left; } }
 
 .shell { max-width: 1320px; margin: 0 auto; padding: 1.2rem 16px 2rem; display: grid; grid-template-columns: 148px minmax(0, 1fr) 300px; gap: 1.2rem; align-items: start; }
 @media (max-width: 1000px) { .shell { grid-template-columns: minmax(0, 1fr); } }

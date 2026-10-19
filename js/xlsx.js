@@ -46,3 +46,17 @@ export function fillRows(xml, rowValues) {
     return setCells(row, refs);
   });
 }
+
+// Set many existing cells in one pass over the sheet (setCells walks the
+// whole sheet once per cell): { C6: 12.5, ... }, each keeping its style.
+export function setCellsBulk(xml, values) {
+  const seen = new Set();
+  const out = xml.replace(/<c r="([A-Z]+\d+)"(?=[ >\/])[^>]*?(?:\/>|>.*?<\/c>)/gs, (m, ref) => {
+    if (!(ref in values)) return m;
+    seen.add(ref);
+    const s = (m.match(/^<c [^>]*?\bs="(\d+)"/) || [])[1];
+    return cellXml(ref, values[ref], s);
+  });
+  for (const ref of Object.keys(values)) if (!seen.has(ref)) throw new Error(`cell ${ref} not found`);
+  return out;
+}

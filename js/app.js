@@ -10,6 +10,7 @@ import { barChart, lineChart } from './charts.js';
 import { monthlyEnergyKwh, monthlyPeakKw } from './tariff.js';
 import { TEMPLATE_URL, XLSX_TYPE, proformaData, fillProforma } from './proforma.js';
 import * as edition from './edition.js';
+import { APP_VERSION, newProject, fingerprint, fileSlug, projectFile, readProjectFile } from './project.js';
 
 // The steps follow the modality: a stand-alone battery has no building load,
 // and a Value Stack battery chooses its election instead of the riders.
@@ -25,7 +26,7 @@ const stepLabel = (id) => (id === 'rate' && state.modality === 'ftm' ? 'Site' : 
 const STORAGE_KEY = 'coned-battery-wizard.v1';
 
 const DEFAULTS = {
-  step: 0, modality: 'btm', ftmRateNo: 1,
+  step: 0, project: null, modality: 'btm', ftmRateNo: 1,
   rateNo: 1, voltage: 'lt', region: 'nyc', zone: 'J', demandIntervalMin: 15, taxPct: 2.5,
   adjustments: { kwh: null, sbcDemand: true, extraDemand: 0 },
   supply: { mode: 'coned_msc', capacityRate: null, mfc: null, reconciliation: null, taxReimbursement: null, fixedRate: 0.09, adder: 0.02, escoCapacity: 0 },
@@ -38,7 +39,7 @@ const DEFAULTS = {
 let state = loadState();
 let data = null;            // fetched JSON
 const presetCache = new Map();
-let uploaded = null;        // { kw, meta, name } - not persisted
+let uploaded = null;        // { kw, meta, name }: travels in the project file, not kept in the browser
 let results = null;
 let running = false;
 
@@ -51,11 +52,13 @@ const roman = { 1: 'I', 2: 'II', 3: 'III' };
 const userError = (msg) => Object.assign(new Error(msg), { user: true });
 
 function loadState() {
+  let s = structuredClone(DEFAULTS);
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return deepMerge(structuredClone(DEFAULTS), JSON.parse(raw));
+    if (raw) s = deepMerge(s, JSON.parse(raw));
   } catch (e) { /* ignore */ }
-  return structuredClone(DEFAULTS);
+  if (!s.project || !s.project.id) s.project = newProject();
+  return s;
 }
 function saveState() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ } }
 function deepMerge(a, b) {
@@ -794,7 +797,8 @@ async function run() {
     const revenue = programRevenue(stack, inp, sol);
     const credits = stack.valueStack ? valueStackCredits(stack.valueStack, sol.imp, sol.exp) : null;
     const summary = summarize(stack, load.kw, battery, baseline, withB, solBillOnly, inp, sol, revenue, credits);
-    results = { stack, base, load, battery, inp, sol, baseline, withB, revenue, credits, alternative, summary, solBillOnly, billOnlySol, elapsedMs: performance.now() - t0, timing: sol.timing };
+    results = { stack, base, load, battery, inp, sol, baseline, withB, revenue, credits, alternative, summary, solBillOnly, billOnlySol, elapsedMs: performance.now() - t0, timing: sol.timing,
+      runAt: new Date().toISOString(), config: fingerprint({ cfg: stackConfig(), battery, load: loadCache.key }) };
     running = false;
     goTo('results');
   } catch (e) {
@@ -1010,12 +1014,13 @@ function afterResults() {
       const L = state.load;
       const programMonths = Object.fromEntries(Object.entries(data.programs.programs).map(([id, p]) => [id, (p.season && p.season.months) || [5, 6, 7, 8, 9]]));
       const d = proformaData({ stack: R.stack, load: R.load.kw, sol: R.sol, summary: S, revenue: R.revenue, battery: R.battery, credits: R.credits, baseline: R.baseline, withB: R.withB, baseStack: state.modality === 'ftm' ? null : R.base }, {
-        rateLabel: `${accountLabel(R.stack.account)}, ${state.region === 'nyc' ? 'NYC' : 'Westchester'} (zone ${R.stack.supply.zone}); ${SUPPLY_MODES[R.stack.supply.mode]}${R.stack.valueStack ? '; Value Stack (Rider R A.9(d), SC 11)' : ''}`,
+        project: runIdentity(R),
+        election: R.stack.valueStack ? ELECTIONS[state.valueStack.election] : undefined,
         programMonths,
         monthlyBills: R.load.source === 'bill' && L.billMode === 'monthly' && L.monthlyBills ? L.monthlyBills : null,
         installedCost: (+state.battery.capexK || 0) * 1000,
       });
-      download('coned_battery_proforma.xlsx', fillProforma(template, d), XLSX_TYPE);
+      download(`${fileSlug(state.project.name)}_proforma.xlsx`, fillProforma(template, d), XLSX_TYPE);
     } catch (err) {
       edition.logError(err);
       btn.insertAdjacentHTML('afterend', '<span class="bad">The pro-forma could not be built. Reload the page and try again.</span>');
@@ -1024,14 +1029,81 @@ function afterResults() {
     }
   });
   $('#dlJson').addEventListener('click', () => {
-    const out = { inputs: stackConfig(), battery: R.battery, load: { label: R.load.label, source: R.load.source, stats: stats(R.load.kw) }, baseline: R.baseline, withBattery: R.withB, programRevenue: R.revenue, valueStackCredits: R.credits, electionComparison: R.alternative, summary: R.summary, generated: new Date().toISOString() };
-    download('coned_battery_results.json', JSON.stringify(out, (k, v) => (v instanceof Float64Array || v instanceof Int32Array ? undefined : v), 1), 'application/json');
+    const out = { project: runIdentity(R), inputs: stackConfig(), battery: R.battery, load: { label: R.load.label, source: R.load.source, stats: stats(R.load.kw) }, baseline: R.baseline, withBattery: R.withB, programRevenue: R.revenue, valueStackCredits: R.credits, electionComparison: R.alternative, summary: R.summary, generated: new Date().toISOString() };
+    download(`${fileSlug(state.project.name)}_results.json`, JSON.stringify(out, (k, v) => (v instanceof Float64Array || v instanceof Int32Array ? undefined : v), 1), 'application/json');
   });
   $('#dlDispatch').addEventListener('click', () => {
     const idx = R.stack.idx;
     const lines = ['timestamp,load_kw,import_kw,export_kw,charge_kw,discharge_kw,soc_kwh,price_usd_per_kwh'];
     for (let t = 0; t < idx.T; t++) lines.push(`${labelOf(idx, t)},${R.load.kw[t].toFixed(2)},${R.sol.imp[t].toFixed(2)},${R.sol.exp[t].toFixed(2)},${R.sol.ch[t].toFixed(2)},${R.sol.dis[t].toFixed(2)},${R.sol.soc[t].toFixed(2)},${R.stack.price[t].toFixed(5)}`);
-    download('coned_battery_dispatch.csv', lines.join('\n'), 'text/csv');
+    download(`${fileSlug(state.project.name)}_dispatch.csv`, lines.join('\n'), 'text/csv');
+  });
+}
+
+// Who and what a run is, for the downloads: the project, the configuration
+// fingerprint and the scenario in words.
+function runIdentity(R) {
+  const enrolled = R.stack.programs.programs.map((p) => p.id.toUpperCase().replace('_', '-'));
+  return {
+    id: state.project.id, name: state.project.name || 'Untitled project', config: R.config, run: R.runAt, version: APP_VERSION,
+    ratesDate: data.statements.in_force_on, modality: MODALITIES[state.modality],
+    rate: `${accountLabel(R.stack.account)}${R.stack.valueStack ? '; Rider R A.9(d) with SC 11' : ''}`,
+    area: `${state.region === 'nyc' ? 'New York City' : 'Westchester'} (zone ${R.stack.supply.zone})`,
+    supply: SUPPLY_MODES[R.stack.supply.mode],
+    dr: (R.stack.valueStack ? `${{ value_stack: 'DRV kept', rider_t: 'Rider T instead of DRV', rider_ac: 'Rider AC instead of DRV' }[state.valueStack.election]}; ` : '') + (enrolled.length ? `${enrolled.join(' + ')}, ${fmtN(state.programs.pledgeKw)} kW pledged at ${state.programs.network}` : 'no programs'),
+    load: R.load.label,
+  };
+}
+
+// ---------------------------------------------------------------- project bar
+// One project at a time: its name and id, and a project file to save and
+// open it with (the uploaded interval data travels in the file).
+let projectMsg = '';
+function renderProject() {
+  const el = $('#project');
+  if (!el) return;
+  const P = state.project;
+  el.innerHTML = `
+    <input type="text" id="projectName" value="${esc(P.name || '')}" placeholder="Untitled project" aria-label="Project name" maxlength="80">
+    <span class="pid" title="Project ID ${esc(P.id)}">#${esc(P.id.slice(0, 8))}</span>
+    <button type="button" class="btn small" id="projectSave">Save project</button>
+    <button type="button" class="btn small" id="projectOpen">Open project</button>
+    <button type="button" class="btn small" id="projectNew">New project</button>
+    <input type="file" id="projectFile" accept=".json,application/json" hidden>
+    ${projectMsg ? `<span class="msg">${esc(projectMsg)}</span>` : ''}`;
+  $('#projectName').addEventListener('change', (e) => { state.project.name = e.target.value.trim(); state.project.updated = new Date().toISOString(); saveState(); });
+  $('#projectSave').addEventListener('click', () => {
+    state.project.updated = new Date().toISOString();
+    download(`${fileSlug(state.project.name)}.coned-battery.json`, JSON.stringify(projectFile(state, uploaded)), 'application/json');
+    projectMsg = `Saved ${new Date().toLocaleTimeString()}${uploaded ? ', with the uploaded interval data' : ''}.`;
+    saveState(); renderProject();
+  });
+  $('#projectOpen').addEventListener('click', () => $('#projectFile').click());
+  $('#projectFile').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    try {
+      const doc = readProjectFile(await f.text());
+      state = deepMerge(structuredClone(DEFAULTS), doc.inputs);
+      state.project = doc.project; state.step = 0;
+      uploaded = doc.upload;
+      results = null; stackCache.key = null; baseCache.key = null; loadCache = { key: null, value: null };
+      projectMsg = `Opened "${doc.project.name || 'Untitled project'}" (saved ${doc.saved ? new Date(doc.saved).toLocaleString() : 'earlier'}).`;
+      render();
+    } catch (err) { projectMsg = err.message; }
+    renderProject();
+  });
+  let armed = null;
+  $('#projectNew').addEventListener('click', (e) => {
+    if (!armed) {
+      e.target.textContent = 'Start over? Click again';
+      armed = setTimeout(() => { armed = null; renderProject(); }, 4000);
+      return;
+    }
+    clearTimeout(armed);
+    state = structuredClone(DEFAULTS); state.project = newProject();
+    uploaded = null; results = null; stackCache.key = null; baseCache.key = null; loadCache = { key: null, value: null };
+    projectMsg = 'New project started. Save the old one first if you need it: it is not kept.';
+    render(); renderProject();
   });
 }
 
@@ -1080,6 +1152,7 @@ async function boot() {
     status.textContent = '';
     if (!STEP_SETS[state.modality]) state.modality = 'btm';
     if (stepId() === 'results') goToSilently('battery');
+    renderProject();
     document.addEventListener('click', (e) => { if (e.target && e.target.id === 'runBtn') run(); });
     render();
   } catch (e) {
