@@ -1184,6 +1184,21 @@ async function openFromServer(id, rev) {
   renderProject();
 }
 
+// A hosted build, reopened: bring back the open version's run (and its
+// uploaded profile, which the browser does not keep) if the inputs are still
+// the ones it was run with.
+async function resumeFromServer() {
+  if (STORE.kind !== 'server' || !state.project.rev) return;
+  try {
+    const got = await STORE.load(state.project.id, state.project.rev);
+    const doc = readProjectDoc(got.doc);
+    if (state.load.mode === 'upload' && !uploaded && doc.upload) { uploaded = doc.upload; loadCache = { key: null, value: null }; }
+    const r = await restoreRun(doc.run);
+    if (r.restored) { projectMsg = `Version ${got.rev} and its run are back.`; goToSilently('results'); render(); }
+    renderProject();
+  } catch (e) { edition.logError(e); }
+}
+
 async function showPanel(kind, refresh = false) {
   if (panel === kind && !refresh) { panel = null; renderProject(); return; }
   panel = kind; panelData = null; renderProject();
@@ -1285,6 +1300,7 @@ async function boot() {
     if (!STEP_SETS[state.modality]) state.modality = 'btm';
     if (stepId() === 'results') goToSilently('battery');
     renderProject();
+    resumeFromServer();
     document.addEventListener('click', (e) => { if (e.target && e.target.id === 'runBtn') run(); });
     render();
   } catch (e) {
