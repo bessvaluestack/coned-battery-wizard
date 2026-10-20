@@ -46,9 +46,40 @@ export function projectFile(state, upload = null) {
 export function readProjectFile(text) {
   let doc;
   try { doc = JSON.parse(text); } catch (e) { throw new Error('This is not a project file (it is not JSON).'); }
+  return readProjectDoc(doc);
+}
+
+export function readProjectDoc(doc) {
   if (!doc || doc.format !== PROJECT_FORMAT) throw new Error('This is not a Con Edison Battery Wizard project file.');
   if (!(doc.version <= PROJECT_FILE_VERSION)) throw new Error(`This project file is from a newer version of the wizard (file version ${doc.version}).`);
   if (!doc.project || !doc.project.id || !doc.inputs) throw new Error('The project file is incomplete.');
   const upload = doc.upload && Array.isArray(doc.upload.kw) ? { name: doc.upload.name, meta: doc.upload.meta, kw: Float64Array.from(doc.upload.kw) } : null;
-  return { project: doc.project, inputs: doc.inputs, upload, app: doc.app, saved: doc.saved };
+  return { project: doc.project, inputs: doc.inputs, upload, app: doc.app, saved: doc.saved, run: doc.run || null };
+}
+
+// A run kept with a project (hosted builds): the dispatch, from which the
+// results page, the charts and the downloads are rebuilt without solving
+// again, and the headline numbers for lists. Flows are rounded to 0.1 W,
+// which keeps the rebuilt bills within a few cents.
+const r3 = (a) => Array.from(a, (v) => Math.round(v * 1e4) / 1e4);
+export function runSnapshot(R, ratesDate) {
+  const s = R.sol;
+  return {
+    version: 1, app: APP_VERSION, ratesDate, runAt: R.runAt, config: R.config, elapsedMs: Math.round(R.elapsedMs || 0),
+    summary: { net: R.summary.savingsTotal, billSavings: R.summary.savingsBill, programs: R.summary.programRevenue, credits: R.summary.creditsTotal || 0, cycles: R.summary.cycles },
+    sol: {
+      imp: r3(s.imp), exp: r3(s.exp), ch: r3(s.ch), dis: r3(s.dis), soc: r3(s.soc),
+      programs: (s.programs || []).map((p) => ({ id: p.id, D: p.D, r: Object.fromEntries(Object.entries(p.r).map(([t, v]) => [t, Math.round(v * 1e4) / 1e4])) })),
+      cycleInfo: s.cycleInfo || null, alt3Kw: s.alt3Kw || 0, dropped: s.dropped || null, timing: s.timing || null, status: s.status, objective: s.objective,
+    },
+    billOnly: R.billOnlySol ? { imp: r3(R.billOnlySol.imp) } : null,
+    alternative: R.alternative ? { net: R.alternative.net, billTotal: R.alternative.billTotal, credits: { totals: R.alternative.credits.totals, total: R.alternative.credits.total, alt3Kw: R.alternative.credits.alt3Kw } } : null,
+  };
+}
+
+// The dispatch of a kept run, as the solver returns it.
+export function solFromSnapshot(snap) {
+  const f = (a) => Float64Array.from(a);
+  const s = snap.sol;
+  return { ...s, imp: f(s.imp), exp: f(s.exp), ch: f(s.ch), dis: f(s.dis), soc: f(s.soc), peaks: [], washIntervals: [] };
 }

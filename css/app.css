@@ -62,6 +62,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .project input[type="text"] { width: 15rem; max-width: 100%; padding: 0.35rem 0.55rem; font-size: 0.88rem; }
 .project .pid { font-family: var(--font-mono); font-size: 0.75rem; color: var(--muted); }
 .project .msg { font-size: 0.8rem; color: var(--muted); flex-basis: 100%; text-align: right; }
+.project { position: relative; }
+.project .btn.on { border-color: var(--accent); color: var(--accent); }
+/* Hosted builds: the Projects and Versions lists drop down under the bar. */
+.ppanel { position: absolute; top: calc(100% + 0.4rem); right: 0; width: min(52rem, calc(100vw - 32px)); max-height: 65vh; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18); padding: 0.8rem 1rem; z-index: 10; text-align: left; }
+.ppanel-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.ppanel .d { color: var(--muted); font-size: 0.8rem; }
+.ppanel input[type="text"] { width: 14rem; }
 @media (max-width: 700px) { .project { margin-left: 0; width: 100%; } .project input[type="text"] { flex: 1; } .project .msg { text-align: left; } }
 
 .shell { max-width: 1320px; margin: 0 auto; padding: 1.2rem 16px 2rem; display: grid; grid-template-columns: 148px minmax(0, 1fr) 300px; gap: 1.2rem; align-items: start; }

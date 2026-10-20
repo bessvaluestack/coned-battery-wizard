@@ -113,3 +113,28 @@ test('hourly solve: exact for a stand-alone battery, not used for a 15-minute bu
   assert.equal(toHours(building), null);
   assert.ok(toHours(building, true).load.length === idx.T / 4);
 });
+
+test('a kept run rebuilds the same results from its saved dispatch', async () => {
+  const { runSnapshot, solFromSnapshot } = await import('../js/project.js');
+  const { programRevenue, summarize } = await import('../js/model.js');
+  const highs = await loadHighs();
+  const battery = { kw: 400, kwh: 1600, rte: 0.88, usableFrac: 0.95, cyclesPerYear: 0, throughputCost: 0 };
+  const cfg = { modality: 'ftm', account: chargingAccount({ modality: 'ftm', rateNo: 1, voltage: 'lt', batteryKw: 400 }), region: 'nyc', zone: 'J', demandIntervalMin: 15, taxPct: 2.5,
+    supply: { mode: 'coned_mhp' }, valueStack: { election: 'rider_t', network: 'CHELSEA', alt3: { hours: [15, 18], days: 10 } },
+    programs: { enabled: { csrp: true, dlrp: true }, network: 'CHELSEA', pledgeKw: 300, participation: 'direct', events: { csrp: 3, dlrp: 2 } } };
+  const stack = buildStack(cfg, data), load = new Float64Array(idx.T);
+  const inp = lpInputs(stack, load, battery, true);
+  const outcome = (sol) => {
+    const withB = billFor(stack, sol.imp), credits = valueStackCredits(stack.valueStack, sol.imp, sol.exp), revenue = programRevenue(stack, inp, sol);
+    const zero = { ...billFor(stack, load), fixed: 0, total: 0 };
+    return { bill: withB.total, credits: credits.total, programs: revenue.total, summary: summarize(stack, load, battery, zero, withB, null, inp, sol, revenue, credits) };
+  };
+  const sol = solveScenario(highs, inp);
+  const R = { sol, runAt: '2026-10-20T12:00:00Z', config: 'abc', elapsedMs: 1, summary: outcome(sol).summary, billOnlySol: null, alternative: null };
+  const snap = JSON.parse(JSON.stringify(runSnapshot(R, '2026-10-07')));
+  assert.equal(snap.ratesDate, '2026-10-07');
+  assert.ok(JSON.stringify(snap).length < 3e6, 'a few MB at most');
+  const a = outcome(sol), b = outcome(solFromSnapshot(snap));
+  for (const k of ['bill', 'credits', 'programs']) assert.ok(Math.abs(a[k] - b[k]) < 0.05, `${k}: ${a[k]} vs ${b[k]}`);
+  assert.ok(Math.abs(a.summary.savingsTotal - b.summary.savingsTotal) < 0.1);
+});

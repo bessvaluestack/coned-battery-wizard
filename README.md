@@ -89,19 +89,19 @@ project** loads one back; **New project** starts over with a new ID. The
 project ID, a fingerprint of the configuration (it changes whenever an
 input does) and the run time go into the results JSON and the pro-forma's
 Wizard_Import sheet, so the financial model can always tell which analysis
-its numbers came from. Shared, server-side projects are the next step (see
-*Hosting*, planned).
+its numbers came from. The hosted version keeps projects, their versions and their
+runs on a server (see *Hosted version*).
 
-## Saved projects server (proof of concept)
+## Hosted version (saved runs and versions)
 
-`server/` is a small Node API (Fastify, Postgres) that stores projects as the
-wizard's project files, every save a revision: `GET/POST /api/projects`,
-`GET/PUT /api/projects/:id` (with `?baseRev=` to refuse a stale save),
-`GET /api/projects/:id/revisions[/:rev]`. `deploy/` runs it on one machine
-with Docker Compose behind Caddy (HTTPS, a team login that also records who
-saved each revision) together with the client build; `deploy/README.md` is
-the step-by-step setup. Tests: `npm test --prefix server` (an in-memory
-Postgres). The wizard's project bar does not use the API yet.
+This build keeps a project in the browser and in files the user saves:
+the inputs, not the results. **coned-battery-wizard-hosted** runs the same
+app (this repo as a submodule) on a server, with `js/store.js` replaced by
+one that keeps every save as a version on the server, the last run
+included, so a project opens straight back to its results. Saving and
+restoring a run is in this repo (`runSnapshot` / `solFromSnapshot` in
+`js/project.js`, `restoreRun` in `js/app.js`), off unless the store says
+`runs: true`.
 
 ## Owner pro-forma (XLSX)
 

@@ -10,7 +10,8 @@ import { barChart, lineChart } from './charts.js';
 import { monthlyEnergyKwh, monthlyPeakKw } from './tariff.js';
 import { TEMPLATE_URL, XLSX_TYPE, proformaData, fillProforma } from './proforma.js';
 import * as edition from './edition.js';
-import { APP_VERSION, newProject, fingerprint, fileSlug, projectFile, readProjectFile } from './project.js';
+import { APP_VERSION, newProject, fingerprint, fileSlug, projectFile, readProjectFile, readProjectDoc, runSnapshot, solFromSnapshot } from './project.js';
+import { STORE } from './store.js';
 
 // The steps follow the modality: a stand-alone battery has no building load,
 // and a Value Stack battery chooses its election instead of the riders.
@@ -754,6 +755,37 @@ function zeroBill(stack, kw) {
   return { ...b, energy: 0, demand: 0, fixed: 0, subtotal: 0, tax: 0, total: 0, energyComponents: zero(b.energyComponents), demandByGroup: zero(b.demandByGroup), peaks: b.peaks.map((p) => ({ ...p, cost: 0 })) };
 }
 
+// Everything after the solves: the bills, program revenue, credits and the
+// summary. A kept run (hosted builds) goes through here from its saved
+// dispatch, so its results page is the one the run produced.
+function assembleResults({ stack, base, load, battery, inp, sol, billOnlySol = null, alternative = null, elapsedMs = 0, runAt, config }) {
+  const baseline = state.modality === 'ftm' ? zeroBill(stack, load.kw) : billFor(base, load.kw);
+  const solBillOnly = billOnlySol ? billFor(stack, billOnlySol.imp) : null;
+  const withB = billFor(stack, sol.imp);
+  const revenue = programRevenue(stack, inp, sol);
+  const credits = stack.valueStack ? valueStackCredits(stack.valueStack, sol.imp, sol.exp) : null;
+  const summary = summarize(stack, load.kw, battery, baseline, withB, solBillOnly, inp, sol, revenue, credits);
+  return { stack, base, load, battery, inp, sol, baseline, withB, revenue, credits, alternative, summary, solBillOnly, billOnlySol, elapsedMs, timing: sol.timing, runAt, config };
+}
+
+// Bring back a kept run when it was made from these very inputs, with this
+// wizard version and these rates; otherwise say why it was not.
+async function restoreRun(snap) {
+  if (!snap) return { restored: false, reason: 'none' };
+  const load = await getLoad();
+  if (!load) return { restored: false, reason: 'load' };
+  const stack = getStack(), base = getBaseStack(), battery = batterySpec();
+  const config = fingerprint({ cfg: stackConfig(), battery, load: loadCache.key });
+  if (snap.app !== APP_VERSION || snap.ratesDate !== data.statements.in_force_on) return { restored: false, reason: 'version' };
+  if (snap.config !== config) return { restored: false, reason: 'inputs' };
+  const withPrograms = stack.programs.programs.some((p) => p.events.length);
+  const inp = lpInputs(stack, load.kw, battery, withPrograms);
+  results = assembleResults({ stack, base, load, battery, inp, sol: solFromSnapshot(snap), billOnlySol: snap.billOnly ? { imp: Float64Array.from(snap.billOnly.imp) } : null,
+    alternative: snap.alternative, elapsedMs: snap.elapsedMs, runAt: snap.runAt, config });
+  results.restored = true;
+  return { restored: true };
+}
+
 async function run() {
   if (running) return;
   const box = $('#runBox');
@@ -777,12 +809,10 @@ async function run() {
     const sol = await solveDispatch(inp);
     const baseline = state.modality === 'ftm' ? zeroBill(stack, load.kw) : billFor(base, load.kw);
     const benefit = (st, s) => billFor(st, s.imp).total;
-    let solBillOnly = null, billOnlyInputs = null, billOnlySol = null, alternative = null;
+    let billOnlySol = null, alternative = null;
     if (withPrograms && !stack.valueStack) {
       show('Solving the bill-only dispatch for comparison.');
-      billOnlyInputs = lpInputs(stack, load.kw, battery, false);
-      billOnlySol = await solveDispatch(billOnlyInputs);
-      solBillOnly = billFor(stack, billOnlySol.imp);
+      billOnlySol = await solveDispatch(lpInputs(stack, load.kw, battery, false));
     }
     if (stack.valueStack && state.valueStack.election !== 'value_stack') {
       // The same battery keeping the DRV (and LSRV) instead of the rider.
@@ -793,14 +823,12 @@ async function run() {
       const altCredits = valueStackCredits(alt.valueStack, altSol.imp, altSol.exp);
       alternative = { credits: altCredits, billTotal: benefit(alt, altSol), net: baseline.total - benefit(alt, altSol) + altCredits.total };
     }
-    const withB = billFor(stack, sol.imp);
-    const revenue = programRevenue(stack, inp, sol);
-    const credits = stack.valueStack ? valueStackCredits(stack.valueStack, sol.imp, sol.exp) : null;
-    const summary = summarize(stack, load.kw, battery, baseline, withB, solBillOnly, inp, sol, revenue, credits);
-    results = { stack, base, load, battery, inp, sol, baseline, withB, revenue, credits, alternative, summary, solBillOnly, billOnlySol, elapsedMs: performance.now() - t0, timing: sol.timing,
-      runAt: new Date().toISOString(), config: fingerprint({ cfg: stackConfig(), battery, load: loadCache.key }) };
+    results = assembleResults({ stack, base, load, battery, inp, sol, billOnlySol, alternative, elapsedMs: performance.now() - t0,
+      runAt: new Date().toISOString(), config: fingerprint({ cfg: stackConfig(), battery, load: loadCache.key }) });
     running = false;
     goTo('results');
+    // A hosted build keeps every run: save it as a new version.
+    if (STORE.kind === 'server') saveToServer();
   } catch (e) {
     running = false; if (btn) btn.disabled = false;
     box.innerHTML = edition.runFailedHtml(e);
@@ -849,7 +877,7 @@ async function stepResults() {
   ];
   const html = `
     <h2>Results</h2>
-    <p class="lede">${esc(R.load.label)}; ${fmtN(R.battery.kw)} kW / ${fmtN(R.battery.kwh)} kWh, ${(R.battery.rte * 100).toFixed(0)}% round trip.${edition.solvedIn(R.elapsedMs)}</p>
+    <p class="lede">${esc(R.load.label)}; ${fmtN(R.battery.kw)} kW / ${fmtN(R.battery.kwh)} kWh, ${(R.battery.rte * 100).toFixed(0)}% round trip.${R.restored ? ` Kept run from ${new Date(R.runAt).toLocaleString()}.` : edition.solvedIn(R.elapsedMs)}</p>
     <div class="hero">
       <div><div class="k">Annual savings</div><div class="v">${fmt$(S.savingsTotal)}</div><div class="s">${pct.toFixed(1)}% of the ${fmt$(B.total)} baseline</div></div>
       <div><div class="k">Bill savings</div><div class="v">${fmt$(S.savingsBill)}</div><div class="s">${R.revenue.total ? `plus ${fmt$(R.revenue.total)} program revenue` : 'no program revenue'}</div></div>
@@ -923,7 +951,7 @@ function resultsValueStack(R) {
   ];
   return `
     <h2>Results</h2>
-    <p class="lede">${esc(MODALITIES[state.modality])}; ${fmtN(R.battery.kw)} kW / ${fmtN(R.battery.kwh)} kWh, ${(R.battery.rte * 100).toFixed(0)}% round trip${ftm ? '' : `; ${esc(R.load.label)}`}.${edition.solvedIn(R.elapsedMs)}</p>
+    <p class="lede">${esc(MODALITIES[state.modality])}; ${fmtN(R.battery.kw)} kW / ${fmtN(R.battery.kwh)} kWh, ${(R.battery.rte * 100).toFixed(0)}% round trip${ftm ? '' : `; ${esc(R.load.label)}`}.${R.restored ? ` Kept run from ${new Date(R.runAt).toLocaleString()}.` : edition.solvedIn(R.elapsedMs)}</p>
     <div class="hero">
       <div><div class="k">Annual net benefit</div><div class="v">${fmt$(S.savingsTotal)}</div><div class="s">${ftm ? 'credits and program revenue less the charging bill' : 'bill savings, credits and program revenue'}</div></div>
       <div><div class="k">Value Stack credits</div><div class="v">${fmt$(S.creditsTotal)}</div><div class="s">${fmtN(C.exportKwh / 1000, 0)} MWh exported${R.revenue.total ? `; plus ${fmt$(R.revenue.total)} programs` : ''}</div></div>
@@ -1062,6 +1090,7 @@ let projectMsg = '';
 function renderProject() {
   const el = $('#project');
   if (!el) return;
+  if (STORE.kind === 'server') return renderServerProject(el);
   const P = state.project;
   el.innerHTML = `
     <input type="text" id="projectName" value="${esc(P.name || '')}" placeholder="Untitled project" aria-label="Project name" maxlength="80">
@@ -1103,6 +1132,109 @@ function renderProject() {
     state = structuredClone(DEFAULTS); state.project = newProject();
     uploaded = null; results = null; stackCache.key = null; baseCache.key = null; loadCache = { key: null, value: null };
     projectMsg = 'New project started. Save the old one first if you need it: it is not kept.';
+    render(); renderProject();
+  });
+}
+
+// ---------------------------------------------------------------- hosted: projects on the server
+// Every save is a version on the server, the last run included; every run
+// saves itself. No logins: the name below the Projects list says who saved.
+const AUTHOR_KEY = 'coned-battery-wizard.author';
+const author = () => { try { return localStorage.getItem(AUTHOR_KEY) || ''; } catch (e) { return ''; } };
+let panel = null, panelData = null, conflict = null;
+
+async function saveToServer({ force = false } = {}) {
+  state.project.updated = new Date().toISOString();
+  const doc = { ...projectFile(state, uploaded), run: results ? runSnapshot(results, data.statements.in_force_on) : null };
+  projectMsg = 'Saving...'; renderProject();
+  try {
+    const r = await STORE.save(doc, { baseRev: force ? null : (state.project.rev ?? null), author: author() });
+    state.project.rev = r.rev; conflict = null; saveState();
+    projectMsg = `Saved as version ${r.rev}${doc.run ? ', with this run' : ''}.`;
+  } catch (e) {
+    if (e.conflict) {
+      conflict = e.conflict;
+      projectMsg = `Someone saved version ${e.conflict.latest} after the version you opened. Open the latest from Versions, or save yours as a new version anyway.`;
+    } else { projectMsg = `Could not save: ${e.message}`; edition.logError(e); }
+  }
+  if (panel) await showPanel(panel, true); else renderProject();
+}
+
+async function openFromServer(id, rev) {
+  projectMsg = 'Opening...'; renderProject();
+  try {
+    const got = await STORE.load(id, rev);
+    const doc = readProjectDoc(got.doc);
+    state = deepMerge(structuredClone(DEFAULTS), doc.inputs);
+    state.project = { ...doc.project, rev: got.rev }; state.step = 0;
+    uploaded = doc.upload; results = null; stackCache.key = null; baseCache.key = null; loadCache = { key: null, value: null };
+    panel = null; conflict = null;
+    const r = await restoreRun(doc.run);
+    const who = `version ${got.rev}, saved ${new Date(got.saved_at).toLocaleString()}${got.saved_by ? ` by ${got.saved_by}` : ''}`;
+    if (r.restored) {
+      projectMsg = `Opened ${who}, with its run.`;
+      goToSilently('results');
+    } else {
+      projectMsg = `Opened ${who}.` + (doc.run
+        ? ` Its run (${new Date(doc.run.runAt).toLocaleDateString()}, ${fmt$(doc.run.summary.net)} a year) was made ${r.reason === 'version' ? 'with an earlier wizard version or other rates' : 'from different inputs'}: run again for results.`
+        : ' It has no run: run it for results.');
+    }
+    render();
+  } catch (e) { projectMsg = `Could not open: ${e.message}`; edition.logError(e); }
+  renderProject();
+}
+
+async function showPanel(kind, refresh = false) {
+  if (panel === kind && !refresh) { panel = null; renderProject(); return; }
+  panel = kind; panelData = null; renderProject();
+  try { panelData = kind === 'projects' ? await STORE.list() : await STORE.revisions(state.project.id); } catch (e) { panelData = { error: e.message }; }
+  renderProject();
+}
+
+function panelHtml() {
+  const when = (t) => (t ? new Date(t).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '');
+  const run = (r) => (r.run_at ? `${fmt$(+r.net || 0)} <span class="d">${when(r.run_at)}</span>` : '<span class="d">no run</span>');
+  if (!panelData) return '<p class="note">Loading...</p>';
+  if (panelData.error) return `<p class="note">${esc(panel === 'versions' && /No such project/.test(panelData.error) ? 'This project has not been saved yet.' : panelData.error)}</p>`;
+  if (panel === 'projects') {
+    return `<div class="inline"><label class="lab" for="projectAuthor" style="margin:0">Saved by</label><input type="text" id="projectAuthor" value="${esc(author())}" placeholder="your name" maxlength="60"></div>
+      ${panelData.length ? `<div class="tablewrap"><table><thead><tr><th>Project</th><th>Last saved</th><th class="num">Versions</th><th>Last run (net / yr)</th><th></th></tr></thead><tbody>
+      ${panelData.map((p) => `<tr><td>${esc(p.name || 'Untitled project')}${p.id === state.project.id ? ' <span class="d">(open)</span>' : ''}</td><td>${when(p.updated_at)}${p.updated_by ? `<br><span class="d">${esc(p.updated_by)}</span>` : ''}</td><td class="num">${p.latest_rev}</td><td>${run(p)}</td><td><button type="button" class="btn small" data-open="${esc(p.id)}">Open</button></td></tr>`).join('')}
+      </tbody></table></div>` : '<p class="note">No projects saved yet.</p>'}`;
+  }
+  return `<div class="tablewrap"><table><thead><tr><th class="num">Version</th><th>Saved</th><th>Name</th><th>Run (net / yr)</th><th>Inputs</th><th></th></tr></thead><tbody>
+    ${panelData.map((r) => `<tr><td class="num">v${r.rev}${r.rev === state.project.rev ? ' <span class="d">(open)</span>' : ''}</td><td>${when(r.saved_at)}${r.saved_by ? `<br><span class="d">${esc(r.saved_by)}</span>` : ''}</td><td>${esc(r.name || '')}</td><td>${run(r)}</td><td><span class="pid">${esc(r.config || '')}</span></td><td><button type="button" class="btn small" data-open="${esc(state.project.id)}" data-rev="${r.rev}">Open</button></td></tr>`).join('')}
+    </tbody></table></div><p class="note">Every save is kept. The Inputs code changes whenever an input does.</p>`;
+}
+
+function renderServerProject(el) {
+  const P = state.project;
+  el.innerHTML = `
+    <input type="text" id="projectName" value="${esc(P.name || '')}" placeholder="Untitled project" aria-label="Project name" maxlength="80">
+    <span class="pid" title="Project ID ${esc(P.id)}">#${esc(P.id.slice(0, 8))} ${P.rev ? `v${P.rev}` : 'not saved'}</span>
+    <button type="button" class="btn small" id="projectSave">Save version</button>
+    <button type="button" class="btn small ${panel === 'projects' ? 'on' : ''}" id="projectList">Projects</button>
+    <button type="button" class="btn small ${panel === 'versions' ? 'on' : ''}" id="projectVersions">Versions</button>
+    <button type="button" class="btn small" id="projectNew">New project</button>
+    ${conflict ? '<button type="button" class="btn small" id="projectForce">Save as a new version anyway</button>' : ''}
+    ${projectMsg ? `<span class="msg">${esc(projectMsg)}</span>` : ''}
+    ${panel ? `<div class="ppanel" role="dialog" aria-label="${panel === 'projects' ? 'Projects' : 'Versions'}"><div class="ppanel-head"><b>${panel === 'projects' ? 'Projects on this server' : `Versions of ${esc(P.name || 'this project')}`}</b><button type="button" class="btn small" id="panelClose">Close</button></div>${panelHtml()}</div>` : ''}`;
+  $('#projectName').addEventListener('change', (e) => { state.project.name = e.target.value.trim(); saveState(); });
+  $('#projectSave').addEventListener('click', () => saveToServer());
+  $('#projectList').addEventListener('click', () => showPanel('projects'));
+  $('#projectVersions').addEventListener('click', () => showPanel('versions'));
+  const force = $('#projectForce'); if (force) force.addEventListener('click', () => saveToServer({ force: true }));
+  const close = $('#panelClose'); if (close) close.addEventListener('click', () => { panel = null; renderProject(); });
+  const who = $('#projectAuthor'); if (who) who.addEventListener('change', (e) => { try { localStorage.setItem(AUTHOR_KEY, e.target.value.trim()); } catch (err) { /* ignore */ } });
+  el.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => openFromServer(b.dataset.open, b.dataset.rev ? +b.dataset.rev : undefined)));
+  let armed = null;
+  $('#projectNew').addEventListener('click', (e) => {
+    if (!armed) { e.target.textContent = 'Start over? Click again'; armed = setTimeout(() => { armed = null; renderProject(); }, 4000); return; }
+    clearTimeout(armed);
+    state = structuredClone(DEFAULTS); state.project = newProject();
+    uploaded = null; results = null; stackCache.key = null; baseCache.key = null; loadCache = { key: null, value: null };
+    panel = null; conflict = null;
+    projectMsg = 'New project started; the others stay on the server.';
     render(); renderProject();
   });
 }
