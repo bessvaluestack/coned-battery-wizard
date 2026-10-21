@@ -19,6 +19,9 @@
 //   - a protected Wizard_Import sheet with everything the wizard provides
 //     (js/wizardsheet.js), and the model's battery, savings and rate cells
 //     linked to it;
+//   - degradation: the cash flow's capacity left each year (Inputs C24, a
+//     replacement in C26 restoring it) and each stream's share at that
+//     capacity from the wizard's capacity curve (Project_Cash_Flow P:T);
 //   - cached formula results and calcChain removed, full recalc on open;
 //   - author and local-path metadata removed.
 
@@ -27,7 +30,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { unzipSync, zipSync, strFromU8, strToU8 } from '../vendor/fflate/fflate.mjs';
 import { colToNum, numToCol, cellXml, setCells } from '../js/xlsx.js';
-import { WIZ_SHEET, LAYOUT, sheetCells, fieldCell, monthCell, ref, UTILITY_COLS, PROGRAM_COLS, VS_COLS } from '../js/wizardsheet.js';
+import { WIZ_SHEET, LAYOUT, sheetCells, fieldCell, monthCell, ref, colOf, UTILITY_COLS, PROGRAM_COLS, VS_COLS, CURVE_COLS } from '../js/wizardsheet.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = resolve(process.argv[2] || join(ROOT, 'doc', '2026-10-08-multifamily-energy-storage-mod.xlsx'));
@@ -196,7 +199,7 @@ for (let r = 6; r <= 31; r++) {
 }
 cf = editFormula(cf, 'C37', 'SUM(D7:E7,I7)', 'SUM(D7:F7,I7)');
 cf = editFormula(cf, 'D37', 'SUM(D7:E7,I7)', 'SUM(D7:F7,I7)');
-cf = appendRow(cf, 45, cellXml('B45', 'Program revenue is held at its Year 1 value (program rates are set by the tariff and are not escalated).', STYLE.note));
+cf = appendRow(cf, 45, cellXml('B45', 'Program revenue is not escalated (program rates are set by the tariff); it follows the capacity curve (S).', STYLE.note));
 // Value Stack credits at G, after program revenue, in both net columns and the payback.
 cf = insertColumn(cf, 'Project_Cash_Flow', 7);
 cf = setCells(cf, { G5: 'Value Stack credits' });
@@ -206,8 +209,49 @@ for (let r = 6; r <= 31; r++) {
 }
 cf = editFormula(cf, 'C37', 'SUM(D7:F7,J7)', 'SUM(D7:G7,J7)');
 cf = editFormula(cf, 'D37', 'SUM(D7:F7,J7)', 'SUM(D7:G7,J7)');
-cf = appendRow(cf, 46, cellXml('B46', 'Value Stack credits are held at their Year 1 value: the DRV and LSRV rates are fixed for 10 years from the in-service date, then reset; energy and capacity follow the market. The Value Stack term is 25 years.', STYLE.note));
-cf = cf.replace(/<dimension ref="[^"]+"/, '<dimension ref="B2:O46"');
+cf = appendRow(cf, 46, cellXml('B46', 'Value Stack credits are not escalated: the DRV and LSRV rates are fixed for 10 years from the in-service date, then reset; energy and capacity follow the market. The Value Stack term is 25 years. They follow the capacity curve (T).', STYLE.note));
+
+// Degradation through the wizard's capacity curve: P the usable energy left
+// in each year (compounding Inputs C24 from Year 1; a replacement in C26
+// restores it from the next year), Q:T each stream's share of its Year 1
+// value at that capacity, interpolated between the curve's levels (held at
+// the lowest below it; 100% when the import has no curve). D:G take the share.
+const C = LAYOUT.curve, curveRange = (key) => `${WIZ_SHEET}!$${colOf(CURVE_COLS, key)}$${C.first}:$${colOf(CURVE_COLS, key)}$${C.last}`;
+const LV = curveRange('level');
+const shareFormula = (r, key) => {
+  const S = curveRange(key), x = `MAX(MIN(${LV}),MIN(MAX(${LV}),$P${r}))`, i = `MIN(COUNT(${LV})-1,MATCH(${x},${LV},-1))`;
+  return `IF(AND(Inputs!$C$64,ISNUMBER($P${r})),IF(COUNT(${LV})<2,Inputs!$C$69,INDEX(${S},${i})+(INDEX(${S},${i}+1)-INDEX(${S},${i}))*(INDEX(${LV},${i})-${x})/(INDEX(${LV},${i})-INDEX(${LV},${i}+1))),"")`;
+};
+{
+  // Percent styles in the look of the money columns next to them (row 6 has its own border).
+  let st = read('xl/styles.xml');
+  const all = st.match(/<cellXfs count="(\d+)">(.*?)<\/cellXfs>/s);
+  const list = all[2].match(/<xf\b[^>]*?(?:\/>|>.*?<\/xf>)/gs);
+  const pctLike = (s) => list[s].replace(/numFmtId="\d+"/, 'numFmtId="167"');
+  const n = +all[1];
+  st = st.replace(/<cellXfs count="\d+">(.*?)<\/cellXfs>/s, (m, body) => `<cellXfs count="${n + 2}">${body}${pctLike(+(cf.match(/<c r="O6" s="(\d+)"/) || [])[1])}${pctLike(+(cf.match(/<c r="O7" s="(\d+)"/) || [])[1])}</cellXfs>`);
+  write('xl/styles.xml', st);
+  const head = (cf.match(/<c r="O5" s="(\d+)"/) || [])[1], pct6 = n, pct = n + 1;
+  const SHARES = [['Q', 'demandShare', 'D'], ['R', 'energyShare', 'E'], ['S', 'programsShare', 'F'], ['T', 'vsShare', 'G']];
+  cf = appendCells(cf, (r) => {
+    if (r === 5) return cellXml('P5', 'Capacity retained', head) + cellXml('Q5', 'Demand share', head) + cellXml('R5', 'Energy share', head) + cellXml('S5', 'Program share', head) + cellXml('T5', 'Value Stack share', head);
+    if (r < 6 || r > 31) return '';
+    const s = r === 6 ? pct6 : pct;
+    const P = `IF(AND(Inputs!$C$64,ISNUMBER($B${r})),IF($B${r}=Inputs!$C$68,"",(Inputs!$C$69-N(Inputs!$C$24))^($B${r}-Inputs!$C$69-IF(AND(N(Inputs!$C$26)>=Inputs!$C$69,$B${r}>Inputs!$C$26),Inputs!$C$26,Inputs!$C$68))),"")`;
+    return `<c r="P${r}" s="${s}"><f>${esc(P)}</f></c>` + SHARES.map(([c, key]) => `<c r="${c}${r}" s="${s}"><f>${esc(shareFormula(r, key))}</f></c>`).join('');
+  });
+  for (let r = 6; r <= 31; r++) {
+    cf = editFormula(cf, `D${r}`, `Value_Streams!$G$18*(Inputs!$C$69+Utility_Rates!$C$23)^($B${r}-Inputs!$C$69)`, `Value_Streams!$G$18*(Inputs!$C$69+Utility_Rates!$C$23)^($B${r}-Inputs!$C$69)*$Q${r}`);
+    cf = editFormula(cf, `E${r}`, `Value_Streams!$J$18*(Inputs!$C$69+Utility_Rates!$C$22)^($B${r}-Inputs!$C$69)`, `Value_Streams!$J$18*(Inputs!$C$69+Utility_Rates!$C$22)^($B${r}-Inputs!$C$69)*$R${r}`);
+    cf = editFormula(cf, `F${r}`, 'Value_Streams!$K$18', `Value_Streams!$K$18*$S${r}`);
+    cf = editFormula(cf, `G${r}`, 'Value_Streams!$L$18+Value_Streams!$M$18+Value_Streams!$N$18', `(Value_Streams!$L$18+Value_Streams!$M$18+Value_Streams!$N$18)*$T${r}`);
+  }
+}
+cf = setCells(cf, {
+  B41: `Future-year savings follow the battery's usable energy: P is what is left each year (Inputs C24 annual degradation, compounding from Year 1; a replacement in Inputs C26 restores it from the next year), and Q:T scale the demand, energy, program and Value Stack streams by the ${TOOL}'s capacity curve (${WIZ_SHEET}), interpolated between the levels it solved. Prices and O&M escalate as before.`,
+  B42: 'No degradation entered, or no curve in the import: Q:T stay at 100% and savings hold at Year 1. Below the lowest level solved the shares hold at that level\'s. Useful life stays a reference; replacement is a one-time nominal outflow in its year.',
+});
+cf = cf.replace(/<dimension ref="[^"]+"/, '<dimension ref="B2:T46"').replace('<col min="3" max="15" width="15.83203125" customWidth="1"/>', '<col min="3" max="20" width="15.83203125" customWidth="1"/>');
 write(sheetPath('Project_Cash_Flow'), cf);
 
 // Outputs: a program revenue row at 12 (the total below picks it up).
@@ -247,6 +291,11 @@ let inp = setCells(sheet('Inputs'), { ...blank, C26: 0, C27: 0, C28: 0, C29: 0, 
 // Value Stack exports (C14): grid-export hours are then expected, not invalid.
 inp = setCells(inp, { B14: 'Value Stack exports', D14: 'TRUE / FALSE', E14: 'TRUE when exports are credited under the Value Stack (Rider R A.9(d) with SC 11); negative net grid demand is then allowed.', B59: 'Grid-export hours', D59: 'must be 0 unless C14', E59: 'Without Value Stack exports (C14 FALSE) negative net grid demand blocks savings and returns.' });
 inp = setCells(inp, { C14: false }, STYLE.text);
+// Degradation and replacement drive the cash flow through the capacity curve.
+inp = setCells(inp, {
+  E24: `Usable energy lost each year, compounding. Each year's savings follow the ${TOOL}'s capacity curve at the capacity left (Project_Cash_Flow P:T). Blank or 0: savings hold at Year 1.`,
+  E26: '0 = none. A replacement restores full capacity from the following year; its cost is a one-time outflow in this year. Outside the analysis horizon it is omitted.',
+});
 inp = editFormula(inp, 'C62', 'C59=$C$68,', 'OR(C59=$C$68,C14=TRUE),');
 inp = editFormula(inp, 'C65', 'IF(C59>C68,"INVALID: grid exports"', 'IF(AND(C59>C68,C14<>TRUE),"INVALID: grid exports"');
 write(sheetPath('Inputs'), inp);

@@ -7,6 +7,8 @@
 // The layout is the interface between the two tools: add rows at the end of
 // a block or new blocks below, never move an existing cell.
 
+import { CURVE_LEVELS, pctOf } from './curve.js';
+
 export const WIZ_SHEET = 'Wizard_Import';
 export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -104,6 +106,39 @@ export const DEMAND_ROWS = 144;
 export const ENERGY_COLS = [['component', 'Energy component', 'text'], ['base', 'Baseline ($)', 'money'], ['after', 'With battery ($)', 'money'], ['savings', 'Savings ($)', 'money']];
 export const ENERGY_ROWS = 8;
 
+// The capacity curve: one row per level of usable energy, each stream's Year
+// 1 value there and its share of the full-capacity value; then the net
+// benefit by month at each level.
+export const CURVE_COLS = [
+  ['level', 'Usable energy retained', 'pct'],
+  ['usableKwh', 'Usable energy (kWh)', 'num1'],
+  ['demand', 'Demand savings ($)', 'money'],
+  ['energy', 'Energy savings at the battery account\'s rates ($)', 'money'],
+  ['programs', 'Program revenue ($)', 'money'],
+  ['exportCredits', 'Export credits: energy + DRV ($)', 'money'],
+  ['capacityCredits', 'Capacity (Alt 3) + LSRV ($)', 'money'],
+  ['accountChange', 'Account change ($)', 'money'],
+  ['net', 'Annual net benefit ($)', 'money'],
+  ['netShare', 'Share of full: net benefit', 'pct'],
+  ['demandShare', 'Share of full: demand savings', 'pct'],
+  ['energyShare', 'Share of full: energy savings', 'pct'],
+  ['programsShare', 'Share of full: program revenue', 'pct'],
+  ['vsShare', 'Share of full: Value Stack and account change', 'pct'],
+  ['cycles', 'Equivalent full cycles', 'num1'],
+];
+export const CURVE_MONTH_COLS = [['month', 'Month', 'text'], ...CURVE_LEVELS.map((f) => [`net${pctOf(f)}`, `Net benefit at ${pctOf(f)}% ($)`, 'money'])];
+
+// Where the run is kept on the hosted wizard: the version holding it and links
+// back to it. Blank for a run that was not saved there.
+export const SAVED_FIELDS = [
+  ['rev', 'Saved version', 'int', 'The version on the hosted wizard that holds this run'],
+  ['link', 'Link to this version', 'text', 'Opens this version with its inputs and its run'],
+  ['open', 'Open it', 'text'],
+  ['projectLink', 'Link to the project', 'text', 'Opens its latest version'],
+  ['savedAt', 'Saved (date and time)', 'text', 'UTC'],
+  ['savedBy', 'Saved by', 'text', 'The name typed in the wizard'],
+];
+
 const col = (i) => String.fromCharCode(66 + i); // B, C, ...
 
 // Row numbers of every block, laid out top to bottom.
@@ -123,7 +158,13 @@ function layout() {
   L.demand = table(DEMAND_ROWS);
   L.energy = table(ENERGY_ROWS);
   L.hourly = r;
-  L.lastRow = r;
+  r += 2;
+  L.curve = table(CURVE_LEVELS.length);
+  L.curveMonthly = table(12, 1);
+  L.curveNote = r;
+  r += 2;
+  L.saved = block(SAVED_FIELDS);
+  L.lastRow = L.saved.head + SAVED_FIELDS.length;
   return L;
 }
 export const LAYOUT = layout();
@@ -145,7 +186,7 @@ export function sheetCells(values = null) {
   const out = {};
   const put = (cell, value, fmt) => { out[cell] = [value, fmt]; };
   put(`B${LAYOUT.title}`, 'WIZARD IMPORT | FROM THE CON EDISON BATTERY WIZARD', 'title');
-  put(`B${LAYOUT.note}`, 'Written by the wizard on every download; the model links here. Protected: change the project in the wizard and download again. All $ include taxes and surcharges; Year 1 only.', 'note');
+  put(`B${LAYOUT.note}`, 'Written by the wizard on every download; the model links here. Protected: change the project in the wizard and download again. All $ include taxes and surcharges; Year 1, with the capacity curve at the end for later years.', 'note');
   const block = (key, title, fields, data) => {
     const b = LAYOUT[key];
     data = data || {};
@@ -187,5 +228,11 @@ export function sheetCells(values = null) {
   table('demand', 'DEMAND CHARGES BY MONTH (EACH DETERMINANT AND RATE)', DEMAND_COLS, v.demand, DEMAND_ROWS);
   table('energy', 'ENERGY BY COMPONENT, YEAR 1', ENERGY_COLS, v.energy, ENERGY_ROWS);
   put(`B${LAYOUT.hourly}`, 'Hourly (8,760 rows): Hourly_Operations D baseline kW, E battery dispatch kW (net of charging), H energy rate $/kWh, L export credit $/kWh.', 'note');
+  table('curve', 'CAPACITY CURVE: YEAR 1 AGAIN WITH LESS USABLE ENERGY (DEGRADATION, REPLACEMENT, AUGMENTATION)', CURVE_COLS, v.curve, CURVE_LEVELS.length);
+  table('curveMonthly', 'CAPACITY CURVE BY MONTH: NET BENEFIT ($)', CURVE_MONTH_COLS, v.curveMonthly, 12, sumKeys(CURVE_MONTH_COLS));
+  block('saved', 'SAVED ANALYSIS ON THE HOSTED WIZARD (BLANK WHEN IT WAS NOT SAVED THERE)', SAVED_FIELDS, v.saved);
+  const link = fieldCell('saved', 'link');
+  put(fieldCell('saved', 'open'), { f: `IF(${link}="","",HYPERLINK(${link},"Open this version in the wizard"))` }, 'text');
+  put(`B${LAYOUT.curveNote}`, 'Each level is the whole year optimised again (bill, programs and Value Stack together) with that share of the usable energy; power, round-trip efficiency and the annual cycle limit (on nameplate kWh) stay as in the BATTERY block. A later year\'s stream is its Year 1 value times its share at that year\'s capacity, interpolated between levels. Blank when the run had no curve.', 'note');
   return out;
 }

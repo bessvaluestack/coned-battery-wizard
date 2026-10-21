@@ -3,7 +3,7 @@
 // sheet, so the financial model can always tell which analysis (and which
 // configuration of it, by the fingerprint) its numbers came from.
 
-export const APP_VERSION = '0.2.0';
+export const APP_VERSION = '0.3.0';
 export const PROJECT_FORMAT = 'coned-battery-wizard/project';
 export const PROJECT_FILE_VERSION = 1;
 
@@ -59,8 +59,9 @@ export function readProjectDoc(doc) {
 
 // A run kept with a project (hosted builds): the dispatch, from which the
 // results page, the charts and the downloads are rebuilt without solving
-// again, and the headline numbers for lists. Flows are rounded to 0.1 W,
-// which keeps the rebuilt bills within a few cents.
+// again, the capacity curve as it was solved, and the headline numbers for
+// lists. Flows are rounded to 0.1 W, which keeps the rebuilt bills within a
+// few cents.
 const r3 = (a) => Array.from(a, (v) => Math.round(v * 1e4) / 1e4);
 export function runSnapshot(R, ratesDate) {
   const s = R.sol;
@@ -74,6 +75,7 @@ export function runSnapshot(R, ratesDate) {
     },
     billOnly: R.billOnlySol ? { imp: r3(R.billOnlySol.imp) } : null,
     alternative: R.alternative ? { net: R.alternative.net, billTotal: R.alternative.billTotal, credits: { totals: R.alternative.credits.totals, total: R.alternative.credits.total, alt3Kw: R.alternative.credits.alt3Kw } } : null,
+    curve: R.curve || null,
   };
 }
 
@@ -82,4 +84,16 @@ export function solFromSnapshot(snap) {
   const f = (a) => Float64Array.from(a);
   const s = snap.sol;
   return { ...s, imp: f(s.imp), exp: f(s.exp), ch: f(s.ch), dis: f(s.dis), soc: f(s.soc), peaks: [], washIntervals: [] };
+}
+
+// A project link (hosted builds): the site address with the project and,
+// for one exact version, its number in the fragment, which never reaches
+// the server's logs: #project=<id>&version=<n>.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const projectHash = (id, rev = null) => `#project=${id}${rev ? `&version=${rev}` : ''}`;
+export function readProjectHash(hash) {
+  const h = new URLSearchParams(String(hash || '').replace(/^#/, ''));
+  const id = h.get('project'), rev = parseInt(h.get('version'), 10);
+  if (!id || !UUID_RE.test(id)) return null;
+  return { id, rev: rev > 0 ? rev : null };
 }

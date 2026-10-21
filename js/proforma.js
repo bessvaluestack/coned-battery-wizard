@@ -1,15 +1,19 @@
 // The owner pro-forma (templates/proforma.xlsx, built by
 // scripts/make_proforma_template.mjs) filled from a run. The wizard writes
 // two places only: the Wizard_Import sheet (project, battery, the monthly
-// bill and its determinants, program revenue by program, Value Stack credits;
-// see js/wizardsheet.js), which the model's battery, savings and rate cells
-// link to, and the 8,760 hourly rows on Hourly_Operations. The installed
-// cost, when one was entered, goes on the capital lines. O&M, finance and
-// resiliency stay as the template has them for the user to set.
+// bill and its determinants, program revenue by program, Value Stack
+// credits, the capacity curve, the saved version and its links; see
+// js/wizardsheet.js), which the model's battery, savings, rate and
+// degradation cells link to, and the 8,760 hourly rows on
+// Hourly_Operations. The installed cost, when one was entered, goes on the
+// capital lines. O&M, finance and resiliency stay as the template has them
+// for the user to set.
 import { unzipSync, zipSync, strFromU8, strToU8 } from '../vendor/fflate/fflate.mjs';
 import { setCells, setCellsBulk, fillRows } from './xlsx.js';
-import { STEPS_PER_HOUR, DT_HOURS } from './timeidx.js';
-import { sheetCells, PROGRAM_IDS, DEMAND_ROWS, MONTHS } from './wizardsheet.js';
+import { STEPS_PER_HOUR } from './timeidx.js';
+import { monthlyBillChange, programsByMonth } from './model.js';
+import { pctOf } from './curve.js';
+import { sheetCells, DEMAND_ROWS, MONTHS } from './wizardsheet.js';
 
 export const TEMPLATE_URL = new URL('../templates/proforma.xlsx', import.meta.url);
 export const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -23,12 +27,13 @@ const PERIOD = { month: 'monthly', day: 'daily (as-used)', year: 'contract deman
  * @param run  { stack, load (kW, 15-min), sol, summary, revenue, battery, baseline / withB (bills),
  *               credits (valueStackCredits) for the Value Stack, baseStack (the bill without the battery) }
  * @param opts { project: { id, name, config, run, version, ratesDate, modality, rate, area, supply, dr, load },
- *               programMonths: { csrp: [5..9], ... }, monthlyBills: [12] | null, installedCost ($), election }
+ *               programMonths: { csrp: [5..9], ... }, monthlyBills: [12] | null, installedCost ($), election,
+ *               curve (capacityCurve) | null, saved: { rev, link, projectLink, savedAt, savedBy } | null }
  */
 export function proformaData(run, opts = {}) {
   const { stack, load, sol, summary, revenue, battery, credits = null, baseline: B, withB: W } = run;
   const baseStack = run.baseStack || stack;
-  const { programMonths = {}, monthlyBills = null, installedCost = 0 } = opts;
+  const { programMonths = {}, monthlyBills = null, installedCost = 0, curve = null, saved = null } = opts;
   const idx = stack.idx, tf = stack.taxFactor, hours = idx.T / STEPS_PER_HOUR;
   const vs = stack.valueStack;
   const inDrv = new Uint8Array(hours);
@@ -52,34 +57,9 @@ export function proformaData(run, opts = {}) {
     if (vs) exportRate[h] = vs.energyPrice[h * STEPS_PER_HOUR] + (inDrv[h] ? vs.drv.rate : 0);
   }
 
-  // The monthly bill, baseline and with the battery, taxes included. The
-  // baseline is the building's own account (none for a stand-alone battery);
-  // with standby the battery's account prices energy differently, and the
-  // part of the energy savings that comes from the new rate is shown apart.
-  const zero = () => new Array(12).fill(0);
-  const kwhBase = zero(), kwhAfter = zero(), kwhExport = zero(), energyBase = zero(), energyAfter = zero(), rateChange = zero();
+  // The monthly bill, baseline and with the battery (see monthlyBillChange).
   const btf = baseStack.taxFactor;
-  for (let t = 0; t < idx.T; t++) {
-    const m = idx.month[t] - 1;
-    kwhBase[m] += load[t] * DT_HOURS; kwhAfter[m] += sol.imp[t] * DT_HOURS; kwhExport[m] += (sol.exp ? sol.exp[t] : 0) * DT_HOURS;
-    energyBase[m] += baseStack.price[t] * load[t] * DT_HOURS * btf;
-    energyAfter[m] += stack.price[t] * sol.imp[t] * DT_HOURS * tf;
-    if (baseStack !== stack) rateChange[m] += load[t] * (baseStack.price[t] * btf - stack.price[t] * tf) * DT_HOURS;
-  }
-  if (B.total === 0) energyBase.fill(0); // no account before a stand-alone battery
-  const demandOf = (bill, factor) => { const out = zero(); for (const p of bill.peaks) out[p.month - 1] += p.cost * factor; return out; };
-  const demandBase = demandOf(B, btf), demandAfter = demandOf(W, tf);
-  const fixedChange = ((B.fixed * btf) - (W.fixed * tf)) / 12;
-  const utility = summary.monthly.map((mm, m) => ({
-    kwhBase: kwhBase[m], kwhAfter: kwhAfter[m], kwhExport: kwhExport[m], peakBase: mm.peakBefore, peakAfter: mm.peakAfter,
-    demandBase: demandBase[m], demandAfter: demandAfter[m], demandSav: demandBase[m] - demandAfter[m],
-    demandRate: mm.peakBefore > 0 ? demandBase[m] / mm.peakBefore : 0,
-    energyBase: energyBase[m], energyAfter: energyAfter[m], energySav: energyBase[m] - energyAfter[m],
-    energyRate: kwhBase[m] > 0 ? energyBase[m] / kwhBase[m] : 0,
-    fixedChange, rateChange: B.total === 0 ? 0 : rateChange[m],
-    billSav: demandBase[m] - demandAfter[m] + energyBase[m] - energyAfter[m] + fixedChange,
-    actualBill: monthlyBills ? +monthlyBills[m] || 0 : undefined,
-  }));
+  const { utility, kwhExport } = monthlyBillChange({ stack, baseStack, load, sol, baseline: B, withB: W, monthly: summary.monthly, monthlyBills });
 
   // Every demand determinant and rate, by charge and month.
   const demand = new Map();
@@ -99,17 +79,7 @@ export function proformaData(run, opts = {}) {
   const names = [...new Set([...Object.keys(B.energyComponents), ...Object.keys(W.energyComponents)])];
   const energy = names.map((n) => { const b = (B.energyComponents[n] || 0) * btf, a = (W.energyComponents[n] || 0) * tf; return { component: n, base: b, after: a, savings: b - a }; });
 
-  // Program revenue by program and month: reservations spread over the
-  // Capability Period, performance in the event months.
-  const programs = Array.from({ length: 12 }, () => ({ total: 0 }));
-  const terms = {};
-  for (const s of revenue.streams) {
-    const season = programMonths[s.id] || [5, 6, 7, 8, 9];
-    for (const m of season) { programs[m - 1][`${s.id}Res`] = (programs[m - 1][`${s.id}Res`] || 0) + s.reservation / season.length; programs[m - 1].total += s.reservation / season.length; }
-    s.eventPerfKwh.forEach((kwh, e) => { const m = +s.eventDays[e].split('/')[0] - 1, v = s.terms.performanceRate * kwh; programs[m][`${s.id}Perf`] = (programs[m][`${s.id}Perf`] || 0) + v; programs[m].total += v; });
-    terms[s.id] = { pledge: s.pledgeKw, delivered: s.deliveredKw, share: s.factor, events: s.events, resRate: s.terms.reservationRate, perfRate: s.terms.performanceRate, resAnnual: s.reservation, perfAnnual: s.performance };
-  }
-  for (const id of PROGRAM_IDS) for (const p of programs) for (const k of ['Res', 'Perf']) if (terms[id] && p[`${id}${k}`] === undefined) p[`${id}${k}`] = 0;
+  const { programs, terms } = programsByMonth(revenue, programMonths);
 
   const vsRows = credits ? Array.from({ length: 12 }, (_, m) => ({ exportKwh: kwhExport[m], energy: credits.energy[m], drv: credits.drv[m], alt3: credits.alt3[m], lsrv: credits.lsrv[m], total: credits.energy[m] + credits.drv[m] + credits.alt3[m] + credits.lsrv[m] })) : null;
   const sum = (a, k) => a.reduce((x, r) => x + (r[k] || 0), 0);
@@ -122,6 +92,9 @@ export function proformaData(run, opts = {}) {
     utility, programs: revenue.streams.length ? programs : null, terms, vs: vsRows,
     vsFields: vs ? { election: opts.election, alt3Kw: credits ? credits.alt3Kw : 0, alt3Rate: vs.alt3.annualRate, drvWindow: vs.drv ? `${vs.drv.hours[0]}:00 to ${vs.drv.hours[1]}:00, non-holiday weekdays ${vs.drv.intervals.length ? 'June 24 to September 15' : ''}` : 'none (election)', lsrvEvents: vs.lsrv ? vs.lsrv.events.length : 0 } : null,
     demand: demandRows, energy,
+    curve: curve ? curve.levels : null,
+    saved,
+    curveMonthly: curve ? MONTHS.map((_, m) => Object.fromEntries(curve.levels.map((p) => [`net${pctOf(p.level)}`, p.monthlyNet[m]]))) : null,
   };
 
   // The installed cost is all-in: it goes on the first capital line, the rest are zero.

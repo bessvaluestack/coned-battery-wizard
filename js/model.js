@@ -317,3 +317,51 @@ export function summarize(stack, load, battery, baselineBill, solBill, solBillOn
     monthly, billOnlySavings: solBillOnly ? baselineBill.total - solBillOnly.total : null,
   };
 }
+
+// The monthly bill, baseline and with the battery, taxes included. The
+// baseline is the building's own account (none for a stand-alone battery);
+// with standby the battery's account prices energy differently, and the
+// part of the energy savings that comes from the new rate is shown apart.
+export function monthlyBillChange({ stack, baseStack = stack, load, sol, baseline: B, withB: W, monthly, monthlyBills = null }) {
+  const idx = stack.idx, tf = stack.taxFactor, btf = baseStack.taxFactor;
+  const zero = () => new Array(12).fill(0);
+  const kwhBase = zero(), kwhAfter = zero(), kwhExport = zero(), energyBase = zero(), energyAfter = zero(), rateChange = zero();
+  for (let t = 0; t < idx.T; t++) {
+    const m = idx.month[t] - 1;
+    kwhBase[m] += load[t] * DT_HOURS; kwhAfter[m] += sol.imp[t] * DT_HOURS; kwhExport[m] += (sol.exp ? sol.exp[t] : 0) * DT_HOURS;
+    energyBase[m] += baseStack.price[t] * load[t] * DT_HOURS * btf;
+    energyAfter[m] += stack.price[t] * sol.imp[t] * DT_HOURS * tf;
+    if (baseStack !== stack) rateChange[m] += load[t] * (baseStack.price[t] * btf - stack.price[t] * tf) * DT_HOURS;
+  }
+  if (B.total === 0) energyBase.fill(0); // no account before a stand-alone battery
+  const demandOf = (bill, factor) => { const out = zero(); for (const p of bill.peaks) out[p.month - 1] += p.cost * factor; return out; };
+  const demandBase = demandOf(B, btf), demandAfter = demandOf(W, tf);
+  const fixedChange = ((B.fixed * btf) - (W.fixed * tf)) / 12;
+  const utility = monthly.map((mm, m) => ({
+    kwhBase: kwhBase[m], kwhAfter: kwhAfter[m], kwhExport: kwhExport[m], peakBase: mm.peakBefore, peakAfter: mm.peakAfter,
+    demandBase: demandBase[m], demandAfter: demandAfter[m], demandSav: demandBase[m] - demandAfter[m],
+    demandRate: mm.peakBefore > 0 ? demandBase[m] / mm.peakBefore : 0,
+    energyBase: energyBase[m], energyAfter: energyAfter[m], energySav: energyBase[m] - energyAfter[m],
+    energyRate: kwhBase[m] > 0 ? energyBase[m] / kwhBase[m] : 0,
+    fixedChange, rateChange: B.total === 0 ? 0 : rateChange[m],
+    billSav: demandBase[m] - demandAfter[m] + energyBase[m] - energyAfter[m] + fixedChange,
+    actualBill: monthlyBills ? +monthlyBills[m] || 0 : undefined,
+  }));
+  return { utility, kwhExport };
+}
+
+// Program revenue by program and month: reservations spread over the
+// Capability Period (`programMonths`: { csrp: [5..9], ... }), performance in
+// the event months; and each program's terms.
+export function programsByMonth(revenue, programMonths = {}) {
+  const programs = Array.from({ length: 12 }, () => ({ total: 0 }));
+  const terms = {};
+  for (const s of revenue.streams) {
+    const season = programMonths[s.id] || [5, 6, 7, 8, 9];
+    for (const m of season) { programs[m - 1][`${s.id}Res`] = (programs[m - 1][`${s.id}Res`] || 0) + s.reservation / season.length; programs[m - 1].total += s.reservation / season.length; }
+    s.eventPerfKwh.forEach((kwh, e) => { const m = +s.eventDays[e].split('/')[0] - 1, v = s.terms.performanceRate * kwh; programs[m][`${s.id}Perf`] = (programs[m][`${s.id}Perf`] || 0) + v; programs[m].total += v; });
+    terms[s.id] = { pledge: s.pledgeKw, delivered: s.deliveredKw, share: s.factor, events: s.events, resRate: s.terms.reservationRate, perfRate: s.terms.performanceRate, resAnnual: s.reservation, perfAnnual: s.performance };
+  }
+  for (const id of Object.keys(terms)) for (const p of programs) for (const k of ['Res', 'Perf']) if (p[`${id}${k}`] === undefined) p[`${id}${k}`] = 0;
+  return { programs, terms };
+}

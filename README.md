@@ -67,9 +67,10 @@ the Value Stack modalities pick an election instead of the riders.
    an uploaded interval CSV (ISO or US timestamps, or Green Button date + time
    columns; kW or kWh; any interval 5 to 60 min).
 5. **Battery**: kW, kWh, round-trip efficiency, usable depth, annual cycle
-   limit, optional throughput cost and installed cost (k$). Warns when the
-   battery cannot carry one full program event at the pledged kW (usable kWh
-   below pledge x event hours / discharge efficiency, or kW below the pledge).
+   limit, optional throughput cost and installed cost (k$), and the capacity
+   curve for degradation (on by default). Warns when the battery cannot
+   carry one full program event at the pledged kW (usable kWh below pledge x
+   event hours / discharge efficiency, or kW below the pledge).
 6. **Results**: annual savings (bill savings + program revenue), the bill by
    component before and after, monthly peaks, a week of dispatch with state
    of charge, assumptions and provenance, JSON / CSV export, and the owner
@@ -77,7 +78,8 @@ the Value Stack modalities pick an election instead of the riders.
    (weakest event) is flagged. With the Value Stack: the annual net benefit,
    the credits by component and month (energy, Alternative 3, DRV, LSRV),
    the account's bill, and for a Rider T / Rider AC election what keeping
-   the DRV and LSRV would have earned (a second solve).
+   the DRV and LSRV would have earned (a second solve). The capacity curve:
+   the year again at 90, 80, 70 and 60% of the usable energy.
 
 ## Projects
 
@@ -103,6 +105,15 @@ restoring a run is in this repo (`runSnapshot` / `solFromSnapshot` in
 `js/project.js`, `restoreRun` in `js/app.js`), off unless the store says
 `runs: true`.
 
+Project links (hosted builds): `<site>#project=<id>&version=<n>` opens that
+version with its inputs and run (without `&version`, the latest). The
+address bar always shows the open version's link; **Copy link** in the
+header, and one on each row of **Versions**, copy it. A run's pro-forma
+carries the version that holds it and both links (Wizard_Import, *saved
+analysis*), so the workbook points back to the exact saved analysis. The
+link is in the fragment, which never reaches the server's logs; reloading
+the open version keeps any edits made since.
+
 ## Owner pro-forma (XLSX)
 
 The wizard writes two places only: a protected **Wizard_Import** sheet and
@@ -115,8 +126,12 @@ efficiency, usable share, cycle limit, Year 1 cycles), the Year 1 summary,
 the monthly bill baseline and with the battery (kWh, billing peaks, demand,
 energy and fixed $, effective $/kW and $/kWh, savings), program revenue by
 program and month with each program's terms, Value Stack credits by month,
-every demand determinant and rate by charge and month, and energy by
-component. The model's battery cells (Inputs C9:C10, C14, C16:C21, C23),
+every demand determinant and rate by charge and month, energy by component,
+and the capacity curve (each stream's Year 1 value at 100, 90, 80, 70 and
+60% of the usable energy with its share of the full-capacity value, and the
+net benefit by month at each level), and on the hosted site the saved
+version holding the run, its link (with an "Open this version in the
+wizard" cell) and the project's. The model's battery cells (Inputs C9:C10, C14, C16:C21, C23),
 savings cells (Value_Streams C:D, G, K, M:N) and rates (Utility_Rates C, F:J)
 are green links to it, so the battery is set in the wizard only.
 
@@ -140,6 +155,13 @@ the vendored `fflate`, MIT):
   Outputs as a Year 1 row.
 - Inputs C14 flags Value Stack exports: grid-export hours are then expected
   instead of invalid.
+- Degradation: Project_Cash_Flow P is the usable energy left each year
+  (Inputs C24, the annual degradation, compounding from Year 1; a
+  replacement year in C26 restores it from the next year), and Q:T each
+  stream's share at that capacity, interpolated on Wizard_Import's capacity
+  curve (held at the lowest level below it). Demand, energy, program and
+  Value Stack columns D:G take the share. With no degradation entered, or no
+  curve in the import, the shares are 100% and savings hold at Year 1.
 - Utility_Rates: effective monthly rates for its readiness checks and bill
   reconciliation, and the monthly bills when they were entered.
 - Inputs: utility, rate and battery specs, and the installed cost when one
@@ -197,6 +219,14 @@ node scripts/make_proforma_template.mjs doc/<workbook>.xlsx
   never worse than the first). A commitment the battery cannot hold over
   the building's load (Alternative 3, LSRV) is dropped with a note. The
   reported credits use the real prices and hourly netting.
+- Capacity curve: the year solved again at 90, 80, 70 and 60% of the usable
+  energy (`js/curve.js`), a full re-optimisation each, with power,
+  round-trip efficiency and the annual cycle limit (counted on nameplate kWh,
+  as warranties count it) unchanged. The four solves run two at a time in
+  extra workers when the machine has the cores. Each level's streams are
+  split the way the pro-forma carries them: demand, energy at the battery
+  account's rates, programs, export credits, capacity credits and the
+  account change.
 - Hourly solve: when the load, prices and every window are constant within
   each hour (a stand-alone battery) the LP runs on 8,760 hours, which is
   exact (averaging a 15-minute dispatch over each hour keeps energy, cost
@@ -294,8 +324,9 @@ node scripts/make_profiles.mjs
 
 ## Next version (planned)
 
-- Multi-year cash flow: battery capacity fade, utility rate escalation,
-  augmentation capex, NPV / IRR / payback.
+- Multi-year cash flow in the wizard itself (the pro-forma already applies
+  escalation, degradation through the capacity curve, replacement, NPV / IRR
+  / payback).
 
 ## Known simplifications
 
@@ -310,8 +341,9 @@ node scripts/make_profiles.mjs
   redistribution is sales-tax exempt.
 - Program baselines are the no-battery meter, not Con Edison's CBL; event
   days are chosen with perfect price foresight.
-- No reactive charges, no minimum charges, single year, no degradation or
-  escalation, no 25-year Value Stack term.
+- No reactive charges, no minimum charges, single year, no escalation, no
+  25-year Value Stack term. Degradation is usable energy only, through the
+  capacity curve: no power or efficiency fade.
 - Value Stack: the SC 11 charges are not added (the customer charge is
   waived when another service class serves the same connection; stand-alone
   storage is exempt from the SC 11 contract demand charge for 15 years if it

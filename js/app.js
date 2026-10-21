@@ -5,12 +5,13 @@ import { ELECTIONS, valueStackCredits, drvIntervals } from './valuestack.js';
 import { SUPPLY_MODES } from './supply.js';
 import { PROGRAM_IDS, PROGRAM_LABELS, PROGRAM_EXCLUDES } from './programs.js';
 import { stats, scaleToBill, scaleToMonthlyBills, parseIntervalCsv, toCsv } from './profiles.js';
-import { solveDispatch } from './solve.js';
+import { solveDispatch, solveAll } from './solve.js';
+import { CURVE_LEVELS, pctOf, atLevel, curvePoint, capacityCurve } from './curve.js';
 import { barChart, lineChart } from './charts.js';
 import { monthlyEnergyKwh, monthlyPeakKw } from './tariff.js';
 import { TEMPLATE_URL, XLSX_TYPE, proformaData, fillProforma } from './proforma.js';
 import * as edition from './edition.js';
-import { APP_VERSION, newProject, fingerprint, fileSlug, projectFile, readProjectFile, readProjectDoc, runSnapshot, solFromSnapshot } from './project.js';
+import { APP_VERSION, newProject, fingerprint, fileSlug, projectFile, readProjectFile, readProjectDoc, runSnapshot, solFromSnapshot, projectHash, readProjectHash } from './project.js';
 import { STORE } from './store.js';
 
 // The steps follow the modality: a stand-alone battery has no building load,
@@ -34,7 +35,7 @@ const DEFAULTS = {
   programs: { enabled: { csrp: false, dlrp: false, term_dlm: false, auto_dlm: false }, network: '', pledgeKw: 100, participation: 'direct', events: { csrp: 3, dlrp: 2, term_dlm: 3, auto_dlm: 3 }, termDlm: { reservationRate: '', performanceRate: '' }, autoDlm: { reservationRate: '', performanceRate: '' } },
   valueStack: { election: 'value_stack', lsrv: false, lsrvEvents: 10, alt3: { hours: [15, 18], days: 10, rate: null }, riderT: { csrp: true, dlrp: true }, acProgram: 'auto_dlm', acDlrp: false },
   load: { mode: 'preset', presetId: 'highrise_central_cooling', billTarget: null, billMode: 'annual', monthlyBills: null, billShape: 'highrise_central_cooling', uploadUnits: 'auto', loadTab: 'preset' },
-  battery: { kw: 200, kwh: 400, rte: 88, usable: 95, cycles: 300, throughputCost: 0, capexK: '' },
+  battery: { kw: 200, kwh: 400, rte: 88, usable: 95, cycles: 300, throughputCost: 0, capexK: '', curve: true },
 };
 
 let state = loadState();
@@ -720,6 +721,7 @@ async function stepBattery() {
       ${field('Throughput cost', numInput('battery.throughputCost', B.throughputCost, { step: 0.001, min: 0, unit: '$/kWh' }), 'Optional degradation charge per kWh discharged; stops cycling for pennies.')}
       ${field('Installed cost (optional)', numInput('battery.capexK', B.capexK, { step: 1, min: 0, unit: 'k$', nullable: true }), 'Thousands of dollars. Used for a simple payback figure and as the pro-forma\'s capital cost.')}
     </div>
+    <label class="check"><input type="checkbox" data-path="battery.curve" ${B.curve !== false ? 'checked' : ''}><span>Capacity curve for degradation <span class="d">Also solves the year at ${CURVE_BELOW}% of the usable energy, two at a time, so the pro-forma can follow capacity fade and a replacement without another run.${state.modality === 'btm_vs' ? ' Behind the meter with exports this about doubles the run time.' : ''}</span></span></label>
     ${acct && state.modality !== 'btm' ? `<p class="${acct.standby ? 'flag' : 'ok'}">${state.modality === 'ftm' ? 'Charging account' : 'Building account with the battery'}: <b>${accountLabel(acct)}</b>. ${esc(acct.reason)}</p>` : ''}
     ${sizeFlags.map((f) => `<p class="flag">${f}</p>`).join('')}
     ${pledgeFlags()}
@@ -742,6 +744,19 @@ function pledgeFlags() {
   return flags.map((f) => `<p class="flag">${f}</p>`).join('');
 }
 
+// The curve's levels below full capacity, in words: "90, 80, 70 and 60".
+const CURVE_BELOW = CURVE_LEVELS.slice(1).map(pctOf).join(', ').replace(/, (\d+)$/, ' and $1');
+
+// The configuration fingerprint of a run: every input it was made from.
+const runConfig = (battery) => fingerprint({ cfg: stackConfig(), battery, load: loadCache.key, curve: state.battery.curve !== false ? CURVE_LEVELS : null });
+
+// The capacity curve solves two levels at a time (the main worker and one
+// more) when the machine has the cores.
+const curveLanes = () => Math.max(1, Math.min(2, (navigator.hardwareConcurrency || 2) - 1));
+
+// Each program's Capability Period months, for spreading reservations.
+const programMonths = () => Object.fromEntries(Object.entries(data.programs.programs).map(([id, p]) => [id, (p.season && p.season.months) || [5, 6, 7, 8, 9]]));
+
 function batterySpec() {
   const B = state.battery;
   return { kw: +B.kw || 0, kwh: +B.kwh || 0, rte: Math.min(1, Math.max(0.05, (+B.rte || 88) / 100)), usableFrac: Math.min(1, Math.max(0.05, (+B.usable || 95) / 100)), cyclesPerYear: +B.cycles || 0, throughputCost: +B.throughputCost || 0 };
@@ -758,14 +773,14 @@ function zeroBill(stack, kw) {
 // Everything after the solves: the bills, program revenue, credits and the
 // summary. A kept run (hosted builds) goes through here from its saved
 // dispatch, so its results page is the one the run produced.
-function assembleResults({ stack, base, load, battery, inp, sol, billOnlySol = null, alternative = null, elapsedMs = 0, runAt, config }) {
+function assembleResults({ stack, base, load, battery, inp, sol, billOnlySol = null, alternative = null, curve = null, curveFailed = false, elapsedMs = 0, runAt, config }) {
   const baseline = state.modality === 'ftm' ? zeroBill(stack, load.kw) : billFor(base, load.kw);
   const solBillOnly = billOnlySol ? billFor(stack, billOnlySol.imp) : null;
   const withB = billFor(stack, sol.imp);
   const revenue = programRevenue(stack, inp, sol);
   const credits = stack.valueStack ? valueStackCredits(stack.valueStack, sol.imp, sol.exp) : null;
   const summary = summarize(stack, load.kw, battery, baseline, withB, solBillOnly, inp, sol, revenue, credits);
-  return { stack, base, load, battery, inp, sol, baseline, withB, revenue, credits, alternative, summary, solBillOnly, billOnlySol, elapsedMs, timing: sol.timing, runAt, config };
+  return { stack, base, load, battery, inp, sol, baseline, withB, revenue, credits, alternative, curve, curveFailed, summary, solBillOnly, billOnlySol, elapsedMs, timing: sol.timing, runAt, config };
 }
 
 // Bring back a kept run when it was made from these very inputs, with this
@@ -775,13 +790,13 @@ async function restoreRun(snap) {
   const load = await getLoad();
   if (!load) return { restored: false, reason: 'load' };
   const stack = getStack(), base = getBaseStack(), battery = batterySpec();
-  const config = fingerprint({ cfg: stackConfig(), battery, load: loadCache.key });
+  const config = runConfig(battery);
   if (snap.app !== APP_VERSION || snap.ratesDate !== data.statements.in_force_on) return { restored: false, reason: 'version' };
   if (snap.config !== config) return { restored: false, reason: 'inputs' };
   const withPrograms = stack.programs.programs.some((p) => p.events.length);
   const inp = lpInputs(stack, load.kw, battery, withPrograms);
   results = assembleResults({ stack, base, load, battery, inp, sol: solFromSnapshot(snap), billOnlySol: snap.billOnly ? { imp: Float64Array.from(snap.billOnly.imp) } : null,
-    alternative: snap.alternative, elapsedMs: snap.elapsedMs, runAt: snap.runAt, config });
+    alternative: snap.alternative, curve: snap.curve || null, elapsedMs: snap.elapsedMs, runAt: snap.runAt, config });
   results.restored = true;
   return { restored: true };
 }
@@ -823,8 +838,24 @@ async function run() {
       const altCredits = valueStackCredits(alt.valueStack, altSol.imp, altSol.exp);
       alternative = { credits: altCredits, billTotal: benefit(alt, altSol), net: baseline.total - benefit(alt, altSol) + altCredits.total };
     }
-    results = assembleResults({ stack, base, load, battery, inp, sol, billOnlySol, alternative, elapsedMs: performance.now() - t0,
-      runAt: new Date().toISOString(), config: fingerprint({ cfg: stackConfig(), battery, load: loadCache.key }) });
+    // The capacity curve: the same year with less usable energy. A failure
+    // here leaves the Year 1 results standing.
+    let curve = null, curveFailed = false;
+    if (state.battery.curve !== false) {
+      const levels = CURVE_LEVELS.slice(1);
+      let solved = 0;
+      const progress = () => show(`Capacity curve for degradation: the year at ${CURVE_BELOW}% of the usable energy (${solved} of ${levels.length} solved).`);
+      progress();
+      try {
+        const inps = levels.map((f) => lpInputs(stack, load.kw, atLevel(battery, f), withPrograms));
+        const sols = await solveAll(inps, { lanes: curveLanes(), onSolved: () => { solved++; progress(); } });
+        const baseStack = state.modality === 'ftm' ? stack : base, months = programMonths();
+        const point = (level, inpL, solL) => curvePoint({ level, stack, baseStack, load: load.kw, battery, inp: inpL, sol: solL, baseline, programMonths: months });
+        curve = capacityCurve([point(1, inp, sol), ...levels.map((f, i) => point(f, inps[i], sols[i]))]);
+      } catch (e) { curveFailed = true; edition.logError(e); }
+    }
+    results = assembleResults({ stack, base, load, battery, inp, sol, billOnlySol, alternative, curve, curveFailed, elapsedMs: performance.now() - t0,
+      runAt: new Date().toISOString(), config: runConfig(battery) });
     running = false;
     goTo('results');
     // A hosted build keeps every run: save it as a new version.
@@ -873,7 +904,7 @@ async function stepResults() {
     `Perfect-foresight dispatch over the model year (2027 calendar, DST ignored); cyclic state of charge; LP relaxation with a post-solve netting of simultaneous charge and discharge.`,
     `Cycle budget: ${fmtN(S.throughputKwh)} kWh discharged = ${S.cycles.toFixed(0)} equivalent full cycles${S.cycleLimit ? ` of the ${S.cycleLimit} allowed` : ' (no cap)'}.` + cycleNote(R),
     ...(R.stack.programs.notes || []).map(esc),
-    `One year, no escalation, no degradation, no capacity augmentation.`,
+    `One year, no escalation. ${curveNote(R)}`,
   ];
   const html = `
     <h2>Results</h2>
@@ -888,6 +919,7 @@ async function stepResults() {
     ${S.billOnlySavings !== null ? `<p class="note">Dispatching for the bill alone would save ${fmt$(S.billOnlySavings)}; holding capacity for program events ${S.billOnlySavings > S.savingsBill ? `costs ${fmt$(S.billOnlySavings - S.savingsBill)} of bill savings` : 'costs nothing on the bill'} and earns ${fmt$(R.revenue.total)}.</p>` : ''}
     <h3>Annual bill, baseline vs with battery</h3>
     <div class="tablewrap"><table><thead><tr><th>Component</th><th class="num">Baseline</th><th class="num">With battery</th><th class="num">Savings</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>
+    ${curveHtml(R)}
     <h3>Monthly peaks</h3>
     <div id="chartPeaks"></div>
     <div class="tablewrap"><table><thead><tr><th>Month</th><th class="num">Peak before kW</th><th class="num">Peak after kW</th><th class="num">Reduction kW</th><th class="num">Demand $ saved</th><th class="num">Extra kWh (losses)</th></tr></thead><tbody>${monthRows}</tbody></table></div>
@@ -938,7 +970,8 @@ function resultsValueStack(R) {
     ...(R.stack.account.standby && !ftm ? ['The baseline is the building\'s current SC 8 bill on standard rates; with the battery it moves to standby.'] : []),
     `Delivery $/kWh adjustments ${R.stack.kwhAdj.toFixed(6)} $/kWh; statements in force on ${esc(data.statements.in_force_on)}.`,
     esc(sup.description) + '.', ...sup.warnings.map(esc), ...R.stack.notes.map(esc),
-    `Value Stack (Rider R A.9(d) with SC 11): credits on each hour's net injection; energy at day-ahead LBMP x ${lf} (General Rule 25.1 losses); Alternative 3 at the ${data.valueStack.statements.length} monthly statements x ${lf}; the DRV and LSRV fixed for 10 years; no environmental component, MTC or Community Credit for storage. The 25-year Value Stack term, escalation and degradation are not modelled.`,
+    `Value Stack (Rider R A.9(d) with SC 11): credits on each hour's net injection; energy at day-ahead LBMP x ${lf} (General Rule 25.1 losses); Alternative 3 at the ${data.valueStack.statements.length} monthly statements x ${lf}; the DRV and LSRV fixed for 10 years; no environmental component, MTC or Community Credit for storage. The 25-year Value Stack term and escalation are not modelled.`,
+    curveNote(R),
     `Alternative 3: the battery holds ${fmtN(C.alt3Kw, 1)} kW of net injection through ${vs.alt3.hours[0]}:00 to ${vs.alt3.hours[1]}:00 on ${vs.alt3.days.length} top-priced July and August weekdays, standing in for the unknown NYCA peak hour; Con Edison estimates a new project's first-year kW.`,
     ...dropped.map(esc),
     ...(vs.drv ? ['No charging and no grid pass-through in the DRV window; outside it the export credit is capped just under the import price in the optimisation (the credits shown use the real prices).'] : []),
@@ -965,6 +998,7 @@ function resultsValueStack(R) {
     <div class="tablewrap"><table><thead><tr><th>Component</th><th class="num">Per year</th></tr></thead><tbody>${creditTable}</tbody></table></div>
     <h3>${ftm ? 'Charging account bill' : 'Annual bill, baseline vs with battery'}</h3>
     <div class="tablewrap"><table><thead><tr><th>Component</th>${ftm ? '<th class="num">Per year</th>' : '<th class="num">Baseline</th><th class="num">With battery</th><th class="num">Savings</th>'}</tr></thead><tbody>${billRows.join('')}</tbody></table></div>
+    ${curveHtml(R)}
     <h3>Credits by month</h3>
     <div id="chartCredits"></div>
     <div class="tablewrap"><table><thead><tr><th>Month</th><th class="num">Energy</th><th class="num">Alt 3</th><th class="num">DRV</th>${vs.lsrv ? '<th class="num">LSRV</th>' : ''}<th class="num">Total</th></tr></thead><tbody>${monthRows}</tbody></table></div>
@@ -977,6 +1011,23 @@ function resultsValueStack(R) {
     <ul class="tight">${assumptions.map((a) => `<li>${a}</li>`).join('')}</ul>
     <div class="inline" style="margin-top:1rem"><button type="button" class="btn small" id="dlXlsx">Download pro-forma (XLSX)</button><button type="button" class="btn small" id="dlJson">Download results (JSON)</button><button type="button" class="btn small" id="dlDispatch">Download dispatch (CSV)</button></div>
     <div class="actions"><button type="button" class="btn" data-nav="-1">Back to battery</button><button type="button" class="btn" id="rerun">Change inputs and re-run</button></div>`;
+}
+
+// The capacity curve on the results page: Year 1 again with less usable energy.
+function curveHtml(R) {
+  if (!R.curve) return R.curveFailed ? '<p class="flag">The capacity curve could not be solved, so the pro-forma holds savings at Year 1. The Year 1 results stand; run again to retry.</p>' : '';
+  const ftm = state.modality === 'ftm', vs = !!R.stack.valueStack, progs = R.revenue.streams.length > 0;
+  const rows = R.curve.levels.map((p) => {
+    const bill = p.demand + p.energy + p.accountChange;
+    return `<tr><td>${pctOf(p.level)}%</td><td class="num">${fmtN(p.usableKwh)}</td><td class="num">${fmt$(ftm ? -bill : bill)}</td>${progs ? `<td class="num">${fmt$(p.programs)}</td>` : ''}${vs ? `<td class="num">${fmt$(p.exportCredits + p.capacityCredits)}</td>` : ''}<td class="num">${fmt$(p.net)}</td><td class="num">${(p.netShare * 100).toFixed(0)}%</td></tr>`;
+  }).join('');
+  return `<h3>Capacity curve, for degradation</h3>
+    <div class="tablewrap"><table><thead><tr><th>Usable energy</th><th class="num">kWh</th><th class="num">${ftm ? 'Charging bill' : 'Bill savings'}</th>${progs ? '<th class="num">Programs</th>' : ''}${vs ? '<th class="num">Value Stack credits</th>' : ''}<th class="num">Net benefit</th><th class="num">Of full</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="note">The whole year optimised again with less usable energy; power, efficiency and the annual cycle limit stay. The pro-forma's cash flow follows this curve from the annual degradation and the replacement year entered there, so a fading battery needs no second run.</p>`;
+}
+function curveNote(R) {
+  return R.curve ? `Degradation through the capacity curve: the year solved again at ${CURVE_BELOW}% of the usable energy, with power, efficiency and the cycle limit (on nameplate kWh) unchanged.`
+    : 'No capacity curve: the pro-forma holds savings at Year 1.';
 }
 
 function cycleNote(R) {
@@ -1040,11 +1091,13 @@ function afterResults() {
       const template = new Uint8Array(await res.arrayBuffer());
       await new Promise((r) => setTimeout(r, 30)); // let the button repaint before the zip work
       const L = state.load;
-      const programMonths = Object.fromEntries(Object.entries(data.programs.programs).map(([id, p]) => [id, (p.season && p.season.months) || [5, 6, 7, 8, 9]]));
+      if (saving) await saving.catch(() => null); // a hosted run's save, so the links point at its version
       const d = proformaData({ stack: R.stack, load: R.load.kw, sol: R.sol, summary: S, revenue: R.revenue, battery: R.battery, credits: R.credits, baseline: R.baseline, withB: R.withB, baseStack: state.modality === 'ftm' ? null : R.base }, {
         project: runIdentity(R),
         election: R.stack.valueStack ? ELECTIONS[state.valueStack.election] : undefined,
-        programMonths,
+        programMonths: programMonths(),
+        curve: R.curve,
+        saved: savedInfo(R),
         monthlyBills: R.load.source === 'bill' && L.billMode === 'monthly' && L.monthlyBills ? L.monthlyBills : null,
         installedCost: (+state.battery.capexK || 0) * 1000,
       });
@@ -1057,7 +1110,7 @@ function afterResults() {
     }
   });
   $('#dlJson').addEventListener('click', () => {
-    const out = { project: runIdentity(R), inputs: stackConfig(), battery: R.battery, load: { label: R.load.label, source: R.load.source, stats: stats(R.load.kw) }, baseline: R.baseline, withBattery: R.withB, programRevenue: R.revenue, valueStackCredits: R.credits, electionComparison: R.alternative, summary: R.summary, generated: new Date().toISOString() };
+    const out = { project: { ...runIdentity(R), saved: savedInfo(R) }, inputs: stackConfig(), battery: R.battery, load: { label: R.load.label, source: R.load.source, stats: stats(R.load.kw) }, baseline: R.baseline, withBattery: R.withB, programRevenue: R.revenue, valueStackCredits: R.credits, electionComparison: R.alternative, capacityCurve: R.curve, summary: R.summary, generated: new Date().toISOString() };
     download(`${fileSlug(state.project.name)}_results.json`, JSON.stringify(out, (k, v) => (v instanceof Float64Array || v instanceof Int32Array ? undefined : v), 1), 'application/json');
   });
   $('#dlDispatch').addEventListener('click', () => {
@@ -1142,25 +1195,62 @@ function renderProject() {
 const AUTHOR_KEY = 'coned-battery-wizard.author';
 const author = () => { try { return localStorage.getItem(AUTHOR_KEY) || ''; } catch (e) { return ''; } };
 let panel = null, panelData = null, conflict = null;
+let saving = null, opening = false;
+
+// A link to a project on this site, at one version or (without) its latest.
+const projectLink = (id, rev = null) => `${location.origin}${location.pathname}${projectHash(id, rev)}`;
+// The address bar follows the open version, so it is always a link to it.
+function showLinkInAddress() {
+  if (STORE.kind !== 'server' || opening) return;
+  const want = state.project.rev ? projectHash(state.project.id, state.project.rev) : '';
+  if (location.hash !== want) history.replaceState(null, '', want || location.pathname + location.search);
+}
+// Where a run is kept, for the downloads: the version holding it and links back to it.
+const savedInfo = (R) => (R && R.saved ? { rev: R.saved.rev, link: projectLink(state.project.id, R.saved.rev), projectLink: projectLink(state.project.id), savedAt: R.saved.at || '', savedBy: R.saved.by || '' } : null);
+
+async function copyText(text) {
+  // The clipboard needs https (or localhost) and a visible, focused page; it
+  // may also never answer, so give it a moment and then try the old way.
+  try {
+    await Promise.race([navigator.clipboard.writeText(text), new Promise((resolve, reject) => setTimeout(() => reject(new Error('clipboard timeout')), 1500))]);
+    return true;
+  } catch (e) { /* plain http, refused or no answer */ }
+  const ta = Object.assign(document.createElement('textarea'), { value: text });
+  ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  let ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  ta.remove();
+  return ok;
+}
+async function copyLink(rev) {
+  const link = projectLink(state.project.id, rev);
+  projectMsg = (await copyText(link)) ? `Link to version ${rev} copied: it opens this version with its inputs and run.` : `Copy this link to version ${rev}: ${link}`;
+  renderProject();
+}
 
 async function saveToServer({ force = false } = {}) {
   state.project.updated = new Date().toISOString();
-  const doc = { ...projectFile(state, uploaded), run: results ? runSnapshot(results, data.statements.in_force_on) : null };
+  const R = results;
+  const doc = { ...projectFile(state, uploaded), run: R ? runSnapshot(R, data.statements.in_force_on) : null };
   projectMsg = 'Saving...'; renderProject();
   try {
-    const r = await STORE.save(doc, { baseRev: force ? null : (state.project.rev ?? null), author: author() });
+    saving = STORE.save(doc, { baseRev: force ? null : (state.project.rev ?? null), author: author() });
+    const r = await saving;
     state.project.rev = r.rev; conflict = null; saveState();
+    if (R) R.saved = { rev: r.rev, at: new Date().toISOString(), by: author() };
     projectMsg = `Saved as version ${r.rev}${doc.run ? ', with this run' : ''}.`;
   } catch (e) {
     if (e.conflict) {
       conflict = e.conflict;
       projectMsg = `Someone saved version ${e.conflict.latest} after the version you opened. Open the latest from Versions, or save yours as a new version anyway.`;
     } else { projectMsg = `Could not save: ${e.message}`; edition.logError(e); }
-  }
+  } finally { saving = null; }
   if (panel) await showPanel(panel, true); else renderProject();
 }
 
 async function openFromServer(id, rev) {
+  let opened = false;
+  opening = true;
   projectMsg = 'Opening...'; renderProject();
   try {
     const got = await STORE.load(id, rev);
@@ -1172,6 +1262,7 @@ async function openFromServer(id, rev) {
     const r = await restoreRun(doc.run);
     const who = `version ${got.rev}, saved ${new Date(got.saved_at).toLocaleString()}${got.saved_by ? ` by ${got.saved_by}` : ''}`;
     if (r.restored) {
+      results.saved = { rev: got.rev, at: got.saved_at, by: got.saved_by };
       projectMsg = `Opened ${who}, with its run.`;
       goToSilently('results');
     } else {
@@ -1180,8 +1271,11 @@ async function openFromServer(id, rev) {
         : ' It has no run: run it for results.');
     }
     render();
+    opened = true;
   } catch (e) { projectMsg = `Could not open: ${e.message}`; edition.logError(e); }
+  opening = false;
   renderProject();
+  return opened;
 }
 
 // A hosted build, reopened: bring back the open version's run (and its
@@ -1194,7 +1288,7 @@ async function resumeFromServer() {
     const doc = readProjectDoc(got.doc);
     if (state.load.mode === 'upload' && !uploaded && doc.upload) { uploaded = doc.upload; loadCache = { key: null, value: null }; }
     const r = await restoreRun(doc.run);
-    if (r.restored) { projectMsg = `Version ${got.rev} and its run are back.`; goToSilently('results'); render(); }
+    if (r.restored) { results.saved = { rev: got.rev, at: got.saved_at, by: got.saved_by }; projectMsg = `Version ${got.rev} and its run are back.`; goToSilently('results'); render(); }
     renderProject();
   } catch (e) { edition.logError(e); }
 }
@@ -1218,8 +1312,8 @@ function panelHtml() {
       </tbody></table></div>` : '<p class="note">No projects saved yet.</p>'}`;
   }
   return `<div class="tablewrap"><table><thead><tr><th class="num">Version</th><th>Saved</th><th>Name</th><th>Run (net / yr)</th><th>Inputs</th><th></th></tr></thead><tbody>
-    ${panelData.map((r) => `<tr><td class="num">v${r.rev}${r.rev === state.project.rev ? ' <span class="d">(open)</span>' : ''}</td><td>${when(r.saved_at)}${r.saved_by ? `<br><span class="d">${esc(r.saved_by)}</span>` : ''}</td><td>${esc(r.name || '')}</td><td>${run(r)}</td><td><span class="pid">${esc(r.config || '')}</span></td><td><button type="button" class="btn small" data-open="${esc(state.project.id)}" data-rev="${r.rev}">Open</button></td></tr>`).join('')}
-    </tbody></table></div><p class="note">Every save is kept. The Inputs code changes whenever an input does.</p>`;
+    ${panelData.map((r) => `<tr><td class="num">v${r.rev}${r.rev === state.project.rev ? ' <span class="d">(open)</span>' : ''}</td><td>${when(r.saved_at)}${r.saved_by ? `<br><span class="d">${esc(r.saved_by)}</span>` : ''}</td><td>${esc(r.name || '')}</td><td>${run(r)}</td><td><span class="pid">${esc(r.config || '')}</span></td><td><button type="button" class="btn small" data-open="${esc(state.project.id)}" data-rev="${r.rev}">Open</button> <button type="button" class="btn small" data-link="${r.rev}">Copy link</button></td></tr>`).join('')}
+    </tbody></table></div><p class="note">Every save is kept. The Inputs code changes whenever an input does. A version's link opens it, with its run, for anyone who has the link.</p>`;
 }
 
 function renderServerProject(el) {
@@ -1230,6 +1324,7 @@ function renderServerProject(el) {
     <button type="button" class="btn small" id="projectSave">Save version</button>
     <button type="button" class="btn small ${panel === 'projects' ? 'on' : ''}" id="projectList">Projects</button>
     <button type="button" class="btn small ${panel === 'versions' ? 'on' : ''}" id="projectVersions">Versions</button>
+    <button type="button" class="btn small" id="projectCopyLink" ${P.rev ? '' : 'disabled title="Save a version first"'}>Copy link</button>
     <button type="button" class="btn small" id="projectNew">New project</button>
     ${conflict ? '<button type="button" class="btn small" id="projectForce">Save as a new version anyway</button>' : ''}
     ${projectMsg ? `<span class="msg">${esc(projectMsg)}</span>` : ''}
@@ -1238,6 +1333,9 @@ function renderServerProject(el) {
   $('#projectSave').addEventListener('click', () => saveToServer());
   $('#projectList').addEventListener('click', () => showPanel('projects'));
   $('#projectVersions').addEventListener('click', () => showPanel('versions'));
+  $('#projectCopyLink').addEventListener('click', () => { if (state.project.rev) copyLink(state.project.rev); });
+  el.querySelectorAll('[data-link]').forEach((b) => b.addEventListener('click', () => copyLink(+b.dataset.link)));
+  showLinkInAddress();
   const force = $('#projectForce'); if (force) force.addEventListener('click', () => saveToServer({ force: true }));
   const close = $('#panelClose'); if (close) close.addEventListener('click', () => { panel = null; renderProject(); });
   const who = $('#projectAuthor'); if (who) who.addEventListener('change', (e) => { try { localStorage.setItem(AUTHOR_KEY, e.target.value.trim()); } catch (err) { /* ignore */ } });
@@ -1299,8 +1397,17 @@ async function boot() {
     status.textContent = '';
     if (!STEP_SETS[state.modality]) state.modality = 'btm';
     if (stepId() === 'results') goToSilently('battery');
-    renderProject();
-    resumeFromServer();
+    // A link to another project or version opens it; otherwise (a reload of
+    // the open version keeps any edits since) a hosted build brings back the
+    // version open last time.
+    const link = STORE.kind === 'server' ? readProjectHash(location.hash) : null;
+    if (link && (link.id !== state.project.id || (link.rev && link.rev !== state.project.rev))) {
+      openFromServer(link.id, link.rev).then((ok) => { if (!ok) resumeFromServer(); });
+    } else { renderProject(); resumeFromServer(); }
+    if (STORE.kind === 'server') window.addEventListener('hashchange', () => {
+      const l = readProjectHash(location.hash);
+      if (l && (l.id !== state.project.id || (l.rev && l.rev !== state.project.rev))) openFromServer(l.id, l.rev);
+    });
     document.addEventListener('click', (e) => { if (e.target && e.target.id === 'runBtn') run(); });
     render();
   } catch (e) {
