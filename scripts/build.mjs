@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 // Build a deployable copy of the app.
 //
-//   node scripts/build.mjs [--client] [--out <dir>]      (default dist/)
+//   node scripts/build.mjs [--client] [--hosted] [--out <dir>]      (default dist/)
+//
+// The manual (manual/*.md) is written for one edition: GitHub Pages (the
+// default) or, with --hosted, the hosted site (coned-battery-wizard-hosted
+// builds with it). The other edition's "::: pages" / "::: hosted" blocks are
+// left out of the output (js/markdown.js forEdition).
 //
 // Without --client the source tree is copied as-is: the internal edition.
 // With --client the output is the client edition:
@@ -19,6 +24,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { unzipSync, strFromU8 } from '../vendor/fflate/fflate.mjs';
+import { forEdition } from '../js/markdown.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -168,15 +174,22 @@ function sanitizeDataFile(name, doc) {
 // ---------------------------------------------------------------- build
 const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]));
 
-export function build({ client = false, out = join(ROOT, 'dist') } = {}) {
+export function build({ client = false, hosted = false, out = join(ROOT, 'dist') } = {}) {
   out = resolve(out);
-  if (out === ROOT || ROOT.startsWith(out + sep) || ['js', 'css', 'data', 'img', 'templates', 'vendor', 'scripts', 'tests'].some((d) => out === join(ROOT, d))) {
+  if (out === ROOT || ROOT.startsWith(out + sep) || ['js', 'css', 'data', 'img', 'manual', 'templates', 'vendor', 'scripts', 'tests'].some((d) => out === join(ROOT, d))) {
     throw new Error(`refusing to build into ${out}`);
   }
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
 
   cpSync(join(ROOT, 'index.html'), join(out, 'index.html'));
+  cpSync(join(ROOT, 'manual.html'), join(out, 'manual.html'));
+  for (const file of walk(join(ROOT, 'manual'))) {
+    const rel = relative(ROOT, file);
+    mkdirSync(dirname(join(out, rel)), { recursive: true });
+    if (file.endsWith('.md')) writeFileSync(join(out, rel), forEdition(readFileSync(file, 'utf8'), hosted ? 'hosted' : 'pages'));
+    else cpSync(file, join(out, rel));
+  }
   cpSync(join(ROOT, 'vendor'), join(out, 'vendor'), { recursive: true });
   cpSync(join(ROOT, 'img'), join(out, 'img'), { recursive: true });
   cpSync(join(ROOT, 'templates'), join(out, 'templates'), { recursive: true });
@@ -213,7 +226,7 @@ export function build({ client = false, out = join(ROOT, 'dist') } = {}) {
     // Text files as they are; workbooks part by part (author and local path included).
     const texts = files.flatMap((file) => {
       const rel = relative(out, file);
-      if (/\.(html|css|js|mjs|json)$/.test(file)) return [{ rel, text: readFileSync(file, 'utf8') }];
+      if (/\.(html|css|js|mjs|json|md)$/.test(file)) return [{ rel, text: readFileSync(file, 'utf8') }];
       if (!file.endsWith('.xlsx')) return [];
       return Object.entries(unzipSync(readFileSync(file))).filter(([p]) => /\.(xml|rels)$/.test(p)).map(([p, b]) => ({ rel: `${rel}:${p}`, text: strFromU8(b) }));
     });
@@ -230,20 +243,20 @@ export function build({ client = false, out = join(ROOT, 'dist') } = {}) {
     }
     if (problems.length) throw new Error(`client build is not clean:\n  ${problems.join('\n  ')}`);
   }
-  return { client, out, files: files.length };
+  return { client, hosted, out, files: files.length };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const outAt = args.indexOf('--out');
-  const known = (a, k) => a === '--client' || (outAt >= 0 && (k === outAt || k === outAt + 1));
+  const known = (a, k) => a === '--client' || a === '--hosted' || (outAt >= 0 && (k === outAt || k === outAt + 1));
   if (args.some((a, k) => !known(a, k)) || (outAt >= 0 && !args[outAt + 1])) {
-    console.error('usage: node scripts/build.mjs [--client] [--out <dir>]');
+    console.error('usage: node scripts/build.mjs [--client] [--hosted] [--out <dir>]');
     process.exit(2);
   }
   try {
-    const r = build({ client: args.includes('--client'), out: outAt >= 0 ? args[outAt + 1] : undefined });
-    console.log(`${r.client ? 'client' : 'internal'} edition: ${r.files} files in ${relative(process.cwd(), r.out) || '.'}`);
+    const r = build({ client: args.includes('--client'), hosted: args.includes('--hosted'), out: outAt >= 0 ? args[outAt + 1] : undefined });
+    console.log(`${r.client ? 'client' : 'internal'} edition (${r.hosted ? 'hosted' : 'GitHub Pages'}): ${r.files} files in ${relative(process.cwd(), r.out) || '.'}`);
   } catch (e) {
     console.error(`build failed: ${e.message}`);
     process.exit(1);

@@ -6,7 +6,7 @@ import { unzipSync, strFromU8 } from '../vendor/fflate/fflate.mjs';
 import { buildStack, billFor, summarize } from '../js/model.js';
 import { proformaData, fillProforma } from '../js/proforma.js';
 import { projectHash, readProjectHash, newProject } from '../js/project.js';
-import { fieldCell } from '../js/wizardsheet.js';
+import { fieldCell, savedBlockCells, LAYOUT } from '../js/wizardsheet.js';
 
 const read = (p) => JSON.parse(readFileSync(new URL('../data/' + p, import.meta.url), 'utf8'));
 const data = { tariffs: read('tariffs_sc8.json'), statements: read('statements.json'), msc: read('msc.json'), lbmp: { J: read('lbmp_J.json'), H: read('lbmp_H.json'), I: read('lbmp_I.json') }, programs: read('programs.json') };
@@ -32,13 +32,18 @@ test('pro-forma: the saved version and its links on Wizard_Import, with a link t
   const run = { stack, load, sol, summary, revenue: { total: 0, streams: [] }, battery, baseline: bill, withB: bill };
   const id = newProject().id, link = `https://wizard.example${projectHash(id, 4)}`;
   const saved = { rev: 4, link, projectLink: `https://wizard.example${projectHash(id)}`, savedAt: '2026-10-21T14:00:00.000Z', savedBy: 'Analyst' };
-  const wiz = strFromU8(unzipSync(fillProforma(template, proformaData(run, { saved })))['xl/worksheets/sheet7.xml']);
+  const wiz = strFromU8(unzipSync(fillProforma(template, proformaData(run, { saved, hosted: true })))['xl/worksheets/sheet7.xml']);
   assert.match(cell(wiz, fieldCell('saved', 'rev')), /<v>4<\/v>/);
   assert.equal(text(wiz, fieldCell('saved', 'link')), link);
   assert.equal(text(wiz, fieldCell('saved', 'savedBy')), 'Analyst');
   assert.match(cell(wiz, fieldCell('saved', 'open')), new RegExp(`HYPERLINK\\(${fieldCell('saved', 'link')},`));
-  // Not saved on a server (GitHub Pages): blank, the formula stays.
-  const blank = strFromU8(unzipSync(fillProforma(template, proformaData(run, {})))['xl/worksheets/sheet7.xml']);
-  assert.equal(cell(blank, fieldCell('saved', 'link')), '');
-  assert.match(cell(blank, fieldCell('saved', 'open')), /HYPERLINK/);
+  assert.match(text(wiz, `B${LAYOUT.saved.head}`), /SAVED ANALYSIS/);
+  // Hosted, a run not saved: the block's values blank, its labels and link formula kept.
+  const unsaved = strFromU8(unzipSync(fillProforma(template, proformaData(run, { hosted: true })))['xl/worksheets/sheet7.xml']);
+  assert.equal(cell(unsaved, fieldCell('saved', 'link')), '');
+  assert.match(cell(unsaved, fieldCell('saved', 'open')), /HYPERLINK/);
+  // GitHub Pages keeps no versions: the whole block is blank, labels and formula too.
+  const pages = strFromU8(unzipSync(fillProforma(template, proformaData(run, {})))['xl/worksheets/sheet7.xml']);
+  for (const c of savedBlockCells()) assert.equal(cell(pages, c), '', c);
+  assert.doesNotMatch(pages, /HOSTED|HYPERLINK/);
 });

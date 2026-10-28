@@ -13,7 +13,7 @@ import { setCells, setCellsBulk, fillRows } from './xlsx.js';
 import { STEPS_PER_HOUR } from './timeidx.js';
 import { monthlyBillChange, programsByMonth } from './model.js';
 import { pctOf } from './curve.js';
-import { sheetCells, DEMAND_ROWS, MONTHS } from './wizardsheet.js';
+import { sheetCells, savedBlockCells, DEMAND_ROWS, MONTHS } from './wizardsheet.js';
 
 export const TEMPLATE_URL = new URL('../templates/proforma.xlsx', import.meta.url);
 export const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -28,12 +28,13 @@ const PERIOD = { month: 'monthly', day: 'daily (as-used)', year: 'contract deman
  *               credits (valueStackCredits) for the Value Stack, baseStack (the bill without the battery) }
  * @param opts { project: { id, name, config, run, version, ratesDate, modality, rate, area, supply, dr, load },
  *               programMonths: { csrp: [5..9], ... }, monthlyBills: [12] | null, installedCost ($), election,
- *               curve (capacityCurve) | null, saved: { rev, link, projectLink, savedAt, savedBy } | null }
+ *               curve (capacityCurve) | null, saved: { rev, link, projectLink, savedAt, savedBy } | null,
+ *               hosted (the hosted edition: it keeps the saved-analysis block) }
  */
 export function proformaData(run, opts = {}) {
   const { stack, load, sol, summary, revenue, battery, credits = null, baseline: B, withB: W } = run;
   const baseStack = run.baseStack || stack;
-  const { programMonths = {}, monthlyBills = null, installedCost = 0, curve = null, saved = null } = opts;
+  const { programMonths = {}, monthlyBills = null, installedCost = 0, curve = null, saved = null, hosted = false } = opts;
   const idx = stack.idx, tf = stack.taxFactor, hours = idx.T / STEPS_PER_HOUR;
   const vs = stack.valueStack;
   const inDrv = new Uint8Array(hours);
@@ -103,7 +104,7 @@ export function proformaData(run, opts = {}) {
     Object.assign(inputs, { C32: installedCost, C33: 0, C34: 0, C35: 0, C36: 0, C37: 0, C38: 0 });
     inputs.E32 = 'All-in installed cost from the Con Edison Battery Wizard; the lines below are 0. Split it across them if you have a breakdown.';
   }
-  return { hourly: { baseline, dispatch, rate, exportRate }, inputs, wizard };
+  return { hourly: { baseline, dispatch, rate, exportRate }, inputs, wizard, hosted };
 }
 
 // The Wizard_Import values as { cell: value }: every value cell of the layout,
@@ -128,6 +129,8 @@ export function fillProforma(template, d) {
     if (h < 0 || h >= baseline.length) return null;
     return exportRate ? { D: baseline[h], E: dispatch[h], H: rate[h], L: exportRate[h] } : { D: baseline[h], E: dispatch[h], H: rate[h] };
   }));
-  edit(SHEET.wizard, (x) => setCellsBulk(x, wizardValues(d.wizard)));
+  const values = wizardValues(d.wizard);
+  if (!d.hosted) for (const c of savedBlockCells()) values[c] = null;
+  edit(SHEET.wizard, (x) => setCellsBulk(x, values));
   return zipSync(files, { level: 6 });
 }

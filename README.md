@@ -85,6 +85,29 @@ the Value Stack modalities pick an election instead of the riders.
    the DRV and LSRV would have earned (a second solve). The capacity curve:
    the year again at 90, 80, 70 and 60% of the usable energy.
 
+## Manual
+
+`manual.html` is a GitBook-style manual for users: `manual/SUMMARY.md` is
+the contents (GitBook's convention), one Markdown page per chapter, rendered
+in the browser by `js/markdown.js` (a small renderer: headings with anchors,
+lists, tables, code, links, images and `> [!NOTE]`-style hints) and
+`js/manual.js` (contents, search, "on this page", previous / next; routes in
+the fragment, `manual.html#/<page>/<section>`, so any static host serves
+it). The header and every step link to it. Add a page by writing its `.md`
+and listing it in `SUMMARY.md`; `tests/manual.test.mjs` checks every page is
+listed and every link between pages and sections lands. The client build
+copies the manual and runs its leak scan over the Markdown too.
+
+The manual has two editions. Text for one site only sits between a line
+`::: pages` (or `::: hosted`) and a line `:::`; `node scripts/build.mjs`
+writes the GitHub Pages edition and drops the hosted blocks (so the Pages
+site carries no hosted text at all), and `--hosted` writes the hosted
+edition, which coned-battery-wizard-hosted builds with. The reader filters
+the same way when the manual runs from the source tree. A test keeps the
+Pages edition free of the hosted site's words. On the Pages edition the
+pro-forma's saved-analysis block on Wizard_Import is left blank, labels
+included.
+
 ## Projects
 
 One project at a time (`js/project.js`): a name and a stable project ID in
@@ -360,7 +383,12 @@ node scripts/make_profiles.mjs
 - SC 9 Rate I's maximum-rate provision is not modelled, and the Rider M
   mandatory hourly pricing threshold is not checked: the user picks the
   supply.
-- No reactive charges, no minimum charges, single year, no escalation, no
+- No reactive charges, and no Minimum Monthly Charge (General Rule 10.10:
+  on SC 8 / SC 9 Rates I-III, 40% of the per-kW demand delivery charges on
+  the highest demand of the last 18 months, paid in place of the delivery
+  demand and energy charges and the MAC when they come to less; standby and
+  Rider R customers are exempt; it does not bind on the presets, with or
+  without a battery). Single year, no escalation, no
   25-year Value Stack term. Degradation is usable energy only, through the
   capacity curve: no power or efficiency fade.
 - Value Stack: the SC 11 charges are not added (the customer charge is

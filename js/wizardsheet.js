@@ -169,6 +169,10 @@ function layout() {
 }
 export const LAYOUT = layout();
 
+// Every cell of the saved-analysis block (title, labels, values, notes): the
+// GitHub Pages edition keeps no versions, so its pro-forma leaves them blank.
+export const savedBlockCells = () => Array.from({ length: SAVED_FIELDS.length + 1 }, (_, i) => ['B', 'C', 'D'].map((c) => `${c}${LAYOUT.saved.head + i}`)).flat();
+
 // Cell addresses for the links and the writer.
 export const fieldCell = (blockKey, key) => `C${LAYOUT[blockKey].rows[key]}`;
 export function colOf(cols, key) { const i = cols.findIndex(([k]) => k === key); if (i < 0) throw new Error(`no column ${key}`); return col(i); }

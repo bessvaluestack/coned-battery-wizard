@@ -213,11 +213,17 @@ function navButtons(opts = {}) {
   return `<div class="actions">${prev}${next}</div>`;
 }
 
+// Each step's page in the manual (manual.html, manual/*.md).
+const MANUAL_PAGE = { modality: 'modality', rate: 'rate', supply: 'supply', riders: 'demand-response', valuestack: 'value-stack', load: 'load', battery: 'battery', results: 'results' };
+const manualLink = (id) => `manual.html#/${MANUAL_PAGE[id]}${id === 'rate' && state.modality === 'ftm' ? '/site-and-charging-account-stand-alone' : ''}`;
+
 async function renderPanel() {
   const panel = $('#panel');
   const fns = { modality: stepModality, rate: stepRate, supply: stepSupply, riders: stepRiders, valuestack: stepValueStack, load: stepLoad, battery: stepBattery, results: stepResults };
   const id = stepId();
   panel.innerHTML = await fns[id]();
+  const head = panel.querySelector('h2');
+  if (head) head.insertAdjacentHTML('afterbegin', `<a class="help-link" href="${manualLink(id)}" target="_blank" rel="noopener">Manual</a>`);
   bindInputs(panel);
   panel.querySelectorAll('[data-nav]').forEach((b) => b.addEventListener('click', () => go(state.step + +b.dataset.nav)));
   const after = panel._after; if (after) { panel._after = null; after(); }
@@ -435,7 +441,7 @@ async function stepRate() {
       ${sbc ? `<label class="check"><input type="checkbox" data-path="adjustments.sbcDemand" ${state.adjustments.sbcDemand !== false ? 'checked' : ''}><span>Include the SBC demand surcharge <span class="d">${sbc}</span></span></label>` : ''}
     </details>
     ${rateCard(stack)}
-    <p class="note">Not modelled: reactive power charges (General Rule 10.11), minimum charges${exportsOn(state.modality) ? ', the SC 11 charges (the customer charge is waived when another service class serves the same connection, and stand-alone storage is exempt from the SC 11 contract demand charge for 15 years if it qualifies by the end of 2030)' : ''}.</p>
+    <p class="note">Not modelled: reactive power charges (General Rule 10.11), the Minimum Monthly Charge (General Rule 10.10)${exportsOn(state.modality) ? ', the SC 11 charges (the customer charge is waived when another service class serves the same connection, and stand-alone storage is exempt from the SC 11 contract demand charge for 15 years if it qualifies by the end of 2030)' : ''}.</p>
     ${navButtons()}`;
 }
 
@@ -1136,6 +1142,7 @@ function afterResults() {
         programMonths: programMonths(),
         curve: R.curve,
         saved: savedInfo(R),
+        hosted: STORE.kind === 'server',
         monthlyBills: R.load.source === 'bill' && L.billMode === 'monthly' && L.monthlyBills ? L.monthlyBills : null,
         installedCost: (+state.battery.capexK || 0) * 1000,
       });
