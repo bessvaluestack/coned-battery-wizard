@@ -25,6 +25,8 @@ The battery's sizes are fixed; the dispatch is optimised over the whole year at 
 
 The dispatch has **perfect foresight**: it knows the whole year's load and prices in advance. A real controller does worse, so treat the results as the value available, not a guarantee.
 
+When nothing else decides when the battery charges (prices flat within the day, say), a tie-break worth a few dollars a year makes it recharge early and stay ready, as a controller holding a reserve would, rather than leaving the state of charge wherever the solver happens to. It changes the year's value by cents.
+
 After the solve, any interval that both charges and discharges is netted, and the bills are worked out from the resulting import.
 
 ### Programs

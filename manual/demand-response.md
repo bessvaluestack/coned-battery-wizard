@@ -50,6 +50,20 @@ The results flag CSRP or DLRP delivering under 80% of the pledge on the weakest 
 
 With a program enrolled, the wizard also solves the year for the bill alone. The results then say what dispatching only for the bill would have saved, so you can see what reserving the battery for events costs on the bill against what the programs pay.
 
+## Demand response only
+
+*Battery use* on the Riders step chooses how the battery is dispatched:
+
+| Battery use | What the battery does |
+|---|---|
+| Bill and demand response together (the default) | One dispatch cuts the bill and carries the pledge through every event |
+| Demand response only | It discharges only in the enrolled programs' events. It charges whenever that costs least; the bill includes the cost of charging and any demand it adds, but the battery never discharges to cut the bill |
+
+Use demand response only to see what the programs alone are worth, or to model a battery operated for demand response and nothing else. It needs at least one program enrolled. The run also solves the bill and demand response together, and the results say how much more that would earn.
+
+> [!TIP]
+> A battery that only does demand response cycles a few times a year, so the bill barely moves, and its program revenue can be slightly higher than in the combined dispatch, where events compete with bill savings for the battery's energy. The combined dispatch is usually worth several times more.
+
 > [!WARNING]
 > On the Battery step the wizard warns when the battery cannot carry one full event at the pledged kW: when its usable energy is below the pledge times the event hours, divided by the discharge efficiency, or when its power is below the pledge. Lower the pledge or add battery.
 

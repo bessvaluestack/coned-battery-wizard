@@ -1,6 +1,6 @@
 // Wizard controller: state, rendering, and the run.
 import { buildIndex, DT_HOURS, MONTH_NAMES, labelOf } from './timeidx.js';
-import { buildStack, billFor, monthlyBills, lpInputs, programRevenue, summarize, eventEnergyCheck, MIN_PERFORMANCE, RATE_LABELS, MODALITIES, chargingAccount, exportsOn, LIMITS, ROMAN } from './model.js';
+import { buildStack, billFor, monthlyBills, lpInputs, programRevenue, summarize, eventEnergyCheck, backupByMonth, MIN_PERFORMANCE, RATE_LABELS, MODALITIES, chargingAccount, exportsOn, LIMITS, ROMAN } from './model.js';
 import { ELECTIONS, valueStackCredits, drvIntervals } from './valuestack.js';
 import { SUPPLY_MODES } from './supply.js';
 import { PROGRAM_IDS, PROGRAM_LABELS, PROGRAM_EXCLUDES } from './programs.js';
@@ -531,6 +531,12 @@ async function stepRiders() {
     <fieldset><legend>Enrol</legend>
       ${PROGRAM_IDS.map((id) => { const pr = pg.programs[id]; return `<label class="check"><input type="checkbox" data-path="programs.enabled.${id}" ${P.enabled[id] ? 'checked' : ''}><span><b>${PROGRAM_LABELS[id]}</b><span class="d">${pr.season.start} to ${pr.season.end}, ${pr.days === 'weekdays' ? 'non-holiday weekdays' : 'any day'}, ${pr.events[Object.keys(pr.events).find((k) => pr.events[k].counts_toward_rate_step) || Object.keys(pr.events)[0]].obligation_hours || 4}-hour events from the network's Contracted Hours; minimum ${pr.min_kw} kW per direct participant.${id === 'csrp' ? ' Reservation $/kW-month by county group, stepping up from the fifth counted event; $1/kWh performance.' : id === 'dlrp' ? ' Reservation by DLRP tier, stepping up at five contingency events; $1/kWh performance.' : id === 'auto_dlm' ? ' Called at 10 minutes\' notice, 8 AM to midnight. Rates come from the Program Agreement: enter them below.' : ' Rates come from the Program Agreement: enter them below.'}</span></span></label>`; }).join('')}
     </fieldset>
+    <fieldset><legend>Battery use</legend>
+      <div class="choices">
+        ${[['both', 'Bill and demand response together', 'One dispatch cuts the bill and carries the pledge through every event, so neither is counted twice.'], ['dr_only', 'Demand response only', 'The battery discharges only in program events; it charges when that costs least, and the bill shows what charging costs. No discharging to cut the bill.']].map(([v, l, d]) => `<label class="choice"><input type="radio" name="drDispatch" data-path="programs.dispatch" value="${v}" ${(P.dispatch || 'both') === v ? 'checked' : ''}><b>${l}</b><small>${d}</small></label>`).join('')}
+      </div>
+      ${P.dispatch === 'dr_only' && !anyOn ? '<p class="flag">Demand response only needs a program enrolled below: without one the battery never discharges.</p>' : ''}
+    </fieldset>
     <p class="note">CSRP and DLRP can be combined, and so can Term-DLM and DLRP; CSRP and Term-DLM cannot, and Auto-DLM stands alone (Rider AC I.2 and the 2027/28 DLM procurement). Both reservations are paid on the same pledge, but an hour in both programs' events pays performance once: CSRP over DLRP, DLRP over Term-DLM.</p>
     ${anyOn ? `
     <div class="grid2">
@@ -762,6 +768,7 @@ async function stepBattery() {
   return `
     <h2>Battery system</h2>
     <p class="lede">${lede}</p>
+    ${state.modality === 'btm' && state.programs.dispatch === 'dr_only' ? '<p class="note">Demand response only (set on the Riders step): the battery discharges only in program events, and the run also solves the bill and demand response together for comparison.</p>' : ''}
     <div class="grid3">
       ${field('Power', numInput('battery.kw', B.kw, { step: 1, min: 0, unit: 'kW' }), 'Inverter rating, charge and discharge.')}
       ${field('Energy', numInput('battery.kwh', B.kwh, { step: 1, min: 0, unit: 'kWh' }), `Nameplate. ${dur ? dur.toFixed(1) + ' h duration.' : ''}`)}
@@ -823,14 +830,14 @@ function zeroBill(stack, kw) {
 // Everything after the solves: the bills, program revenue, credits and the
 // summary. A kept run (hosted builds) goes through here from its saved
 // dispatch, so its results page is the one the run produced.
-function assembleResults({ stack, base, load, battery, inp, sol, billOnlySol = null, alternative = null, curve = null, curveFailed = false, elapsedMs = 0, runAt, config }) {
+function assembleResults({ stack, base, load, battery, inp, sol, billOnlySol = null, alternative = null, coopt = null, curve = null, curveFailed = false, elapsedMs = 0, runAt, config }) {
   const baseline = state.modality === 'ftm' ? zeroBill(stack, load.kw) : billFor(base, load.kw);
   const solBillOnly = billOnlySol ? billFor(stack, billOnlySol.imp) : null;
   const withB = billFor(stack, sol.imp);
   const revenue = programRevenue(stack, inp, sol);
   const credits = stack.valueStack ? valueStackCredits(stack.valueStack, sol.imp, sol.exp) : null;
   const summary = summarize(stack, load.kw, battery, baseline, withB, solBillOnly, inp, sol, revenue, credits);
-  return { stack, base, load, battery, inp, sol, baseline, withB, revenue, credits, alternative, curve, curveFailed, summary, solBillOnly, billOnlySol, elapsedMs, timing: sol.timing, runAt, config };
+  return { stack, base, load, battery, inp, sol, baseline, withB, revenue, credits, alternative, coopt, curve, curveFailed, summary, solBillOnly, billOnlySol, elapsedMs, timing: sol.timing, runAt, config };
 }
 
 // Bring back a kept run when it was made from these very inputs, with this
@@ -846,7 +853,7 @@ async function restoreRun(snap) {
   const withPrograms = stack.programs.programs.some((p) => p.events.length);
   const inp = lpInputs(stack, load.kw, battery, withPrograms);
   results = assembleResults({ stack, base, load, battery, inp, sol: solFromSnapshot(snap), billOnlySol: snap.billOnly ? { imp: Float64Array.from(snap.billOnly.imp) } : null,
-    alternative: snap.alternative, curve: snap.curve || null, elapsedMs: snap.elapsedMs, runAt: snap.runAt, config });
+    alternative: snap.alternative, coopt: snap.coopt || null, curve: snap.curve || null, elapsedMs: snap.elapsedMs, runAt: snap.runAt, config });
   results.restored = true;
   return { restored: true };
 }
@@ -867,6 +874,7 @@ async function run() {
       if (stack.valueStack.blocked.length) throw userError(stack.valueStack.blocked[0]);
     }
     const withPrograms = stack.programs.programs.some((p) => p.events.length);
+    if (stack.drOnly && !withPrograms) throw userError('Demand response only needs a program enrolled on the Riders step: without one the battery never discharges.');
     const show = (msg) => { box.innerHTML = `<div class="progress">${msg}<div class="bar"><i></i></div></div>`; };
     show(edition.SOLVING + (stack.valueStack && state.modality === 'btm_vs' ? ' Behind the meter with exports the year takes two solves: allow up to a minute, more with a tight cycle limit, and twice that for an election compared with the DRV.' : ''));
     const t0 = performance.now();
@@ -874,10 +882,18 @@ async function run() {
     const sol = await solveDispatch(inp);
     const baseline = state.modality === 'ftm' ? zeroBill(stack, load.kw) : billFor(base, load.kw);
     const benefit = (st, s) => billFor(st, s.imp).total;
-    let billOnlySol = null, alternative = null;
-    if (withPrograms && !stack.valueStack) {
+    let billOnlySol = null, alternative = null, coopt = null;
+    if (withPrograms && !stack.valueStack && !stack.drOnly) {
       show('Solving the bill-only dispatch for comparison.');
       billOnlySol = await solveDispatch(lpInputs(stack, load.kw, battery, false));
+    }
+    if (stack.drOnly) {
+      // The same battery optimising the bill as well, for comparison.
+      show('Solving the dispatch for the bill and demand response together, for comparison.');
+      const inpBoth = lpInputs(stack, load.kw, battery, true, { drOnly: false });
+      const both = await solveDispatch(inpBoth);
+      const billSavings = baseline.total - billFor(stack, both.imp).total, programs = programRevenue(stack, inpBoth, both).total;
+      coopt = { billSavings, programs, net: billSavings + programs };
     }
     if (stack.valueStack && state.valueStack.election !== 'value_stack') {
       // The same battery keeping the DRV (and LSRV) instead of the rider.
@@ -904,7 +920,7 @@ async function run() {
         curve = capacityCurve([point(1, inp, sol), ...levels.map((f, i) => point(f, inps[i], sols[i]))]);
       } catch (e) { curveFailed = true; edition.logError(e); }
     }
-    results = assembleResults({ stack, base, load, battery, inp, sol, billOnlySol, alternative, curve, curveFailed, elapsedMs: performance.now() - t0,
+    results = assembleResults({ stack, base, load, battery, inp, sol, billOnlySol, alternative, coopt, curve, curveFailed, elapsedMs: performance.now() - t0,
       runAt: new Date().toISOString(), config: runConfig(battery) });
     running = false;
     goTo('results');
@@ -954,6 +970,7 @@ async function stepResults() {
     ...(R.stack.account.sc === 9 && R.stack.account.rateNo === 1 ? [MAX_RATE_NOTE] : []),
     `Perfect-foresight dispatch over the model year (2027 calendar, DST ignored); cyclic state of charge; LP relaxation with a post-solve netting of simultaneous charge and discharge.`,
     `Cycle budget: ${fmtN(S.throughputKwh)} kWh discharged = ${S.cycles.toFixed(0)} equivalent full cycles${S.cycleLimit ? ` of the ${S.cycleLimit} allowed` : ' (no cap)'}.` + cycleNote(R),
+    ...(R.stack.drOnly ? ['Demand response only: discharging is limited to the enrolled programs\' event intervals; charging is optimised against the bill, which includes its cost and any demand it adds.'] : []),
     ...(R.stack.programs.notes || []).map(esc),
     `One year, no escalation. ${curveNote(R)}`,
   ];
@@ -967,6 +984,7 @@ async function stepResults() {
       ${capex ? `<div><div class="k">Simple payback</div><div class="v">${S.savingsTotal > 0 ? (capex / S.savingsTotal).toFixed(1) + ' yr' : '-'}</div><div class="s">on ${fmt$(capex / 1000)}k installed</div></div>` : ''}
     </div>
     ${weak.join('')}
+    ${R.coopt ? `<p class="note">Demand response only: the battery discharges only in program events. Optimising the bill as well would earn ${fmt$(R.coopt.net)} a year (${fmt$(R.coopt.billSavings)} on the bill, ${fmt$(R.coopt.programs)} from programs): ${R.coopt.net >= S.savingsTotal ? `${fmt$(R.coopt.net - S.savingsTotal)} more` : `${fmt$(S.savingsTotal - R.coopt.net)} less`} than demand response alone.</p>` : ''}
     ${S.billOnlySavings !== null ? `<p class="note">Dispatching for the bill alone would save ${fmt$(S.billOnlySavings)}; holding capacity for program events ${S.billOnlySavings > S.savingsBill ? `costs ${fmt$(S.billOnlySavings - S.savingsBill)} of bill savings` : 'costs nothing on the bill'} and earns ${fmt$(R.revenue.total)}.</p>` : ''}
     <h3>Annual bill, baseline vs with battery</h3>
     <div class="tablewrap"><table><thead><tr><th>Component</th><th class="num">Baseline</th><th class="num">With battery</th><th class="num">Savings</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>
@@ -978,6 +996,7 @@ async function stepResults() {
     <div class="inline"><label class="lab" for="weekSel" style="margin:0">Week</label><select id="weekSel">${weeks.map((w) => `<option value="${w.start}" ${w.selected ? 'selected' : ''}>${w.label}</option>`).join('')}</select></div>
     <div id="chartWeek"></div>
     <div id="chartSoc"></div>
+    ${backupHtml(R)}
     <h3>Assumptions and provenance</h3>
     <ul class="tight">${assumptions.map((a) => `<li>${a}</li>`).join('')}</ul>
     <div class="inline" style="margin-top:1rem"><button type="button" class="btn small" id="dlXlsx">Download pro-forma (XLSX)</button><button type="button" class="btn small" id="dlJson">Download results (JSON)</button><button type="button" class="btn small" id="dlDispatch">Download dispatch (CSV)</button></div>
@@ -1059,6 +1078,7 @@ function resultsValueStack(R) {
     <div class="inline"><label class="lab" for="weekSel" style="margin:0">Week</label><select id="weekSel">${weeks.map((w) => `<option value="${w.start}" ${w.selected ? 'selected' : ''}>${w.label}</option>`).join('')}</select></div>
     <div id="chartWeek"></div>
     <div id="chartSoc"></div>
+    ${backupHtml(R)}
     <h3>Assumptions and provenance</h3>
     <ul class="tight">${assumptions.map((a) => `<li>${a}</li>`).join('')}</ul>
     <div class="inline" style="margin-top:1rem"><button type="button" class="btn small" id="dlXlsx">Download pro-forma (XLSX)</button><button type="button" class="btn small" id="dlJson">Download results (JSON)</button><button type="button" class="btn small" id="dlDispatch">Download dispatch (CSV)</button></div>
@@ -1080,6 +1100,33 @@ function curveHtml(R) {
 function curveNote(R) {
   return R.curve ? `Degradation through the capacity curve: the year solved again at ${CURVE_BELOW}% of the usable energy, with power, efficiency and the cycle limit (on nameplate kWh) unchanged.`
     : 'No capacity curve: the pro-forma holds savings at Year 1.';
+}
+
+// The state of charge month by month, and the backup it gives the building:
+// hours at a critical load of 25% of the month's peak (none for a stand-alone
+// battery, which has no load of its own).
+const BACKUP_SHARE = 0.25;
+const backupRows = (R) => backupByMonth({ idx: R.stack.idx, soc: R.sol.soc, battery: R.battery, share: BACKUP_SHARE,
+  peaks: state.modality === 'ftm' ? null : R.summary.monthly.map((m) => m.peakBefore) });
+function backupHtml(R) {
+  const rows = backupRows(R), ftm = state.modality === 'ftm';
+  const usable = R.battery.kwh * R.battery.usableFrac, pct = (v) => `${(v * 100).toFixed(0)}%`;
+  const avg = rows.reduce((a, r) => a + r.avgKwh, 0) / 12;
+  const lo = rows.reduce((a, r) => (r.avgKwh < a.avgKwh ? r : a)), hi = rows.reduce((a, r) => (r.avgKwh > a.avgKwh ? r : a));
+  let note = `On average the battery holds ${fmtN(avg)} kWh, ${pct(avg / usable)} of its ${fmtN(usable)} kWh usable: least in ${lo.month} (${fmtN(lo.avgKwh)} kWh), most in ${hi.month} (${fmtN(hi.avgKwh)} kWh).`;
+  if (!ftm) {
+    const short = rows.reduce((a, r) => (r.hours < a.hours ? r : a)), long = rows.reduce((a, r) => (r.hours > a.hours ? r : a));
+    note += ` In an outage, that average charge would carry a critical load of ${pct(BACKUP_SHARE)} of the month's peak for ${short.hours.toFixed(1)} to ${long.hours.toFixed(1)} hours: shortest in ${short.month} (${fmtN(short.loadKw)} kW), longest in ${long.month} (${fmtN(long.loadKw)} kW).`;
+    const limited = rows.filter((r) => r.powerLimited);
+    if (limited.length) note += ` In ${limited.length === 12 ? 'every month' : limited.map((r) => r.month).join(', ')}, ${pct(BACKUP_SHARE)} of the peak is more than the battery's ${fmtN(R.battery.kw)} kW, so it carries only ${fmtN(R.battery.kw)} kW of that load.`;
+  }
+  note += ' The dispatch keeps no reserve for outages. Between uses it recharges as soon as that costs nothing extra, but these are what normal operation leaves in the battery at an average moment, and right after a discharge it can be close to empty.';
+  const head = `<th>Month</th><th class="num">Average stored kWh</th><th class="num">Of usable</th>${ftm ? '' : `<th class="num">${pct(BACKUP_SHARE)} of peak kW</th><th class="num">Backup hours</th>`}`;
+  const body = rows.map((r) => `<tr><td>${r.month}</td><td class="num">${fmtN(r.avgKwh)}</td><td class="num">${pct(r.avgShare)}</td>${ftm ? '' : `<td class="num">${fmtN(r.loadKw)}</td><td class="num">${r.hours.toFixed(1)}${r.powerLimited ? ` at ${fmtN(r.carriedKw)} kW` : ''}</td>`}</tr>`).join('');
+  return `<h3>State of charge${ftm ? '' : ' and backup'}</h3>
+    <div id="chartSocMonthly"></div>
+    <p class="note">${note}</p>
+    <div class="tablewrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 function cycleNote(R) {
@@ -1117,6 +1164,7 @@ function afterResults() {
     const C = R.credits;
     barChart($('#chartCredits'), { labels: MONTH_NAMES, series: [{ name: 'Energy', values: C.energy, color: 'var(--s1)' }, { name: 'Alternative 3', values: C.alt3, color: 'var(--s2)' }, { name: 'DRV + LSRV', values: C.drv.map((v, m) => v + C.lsrv[m]), color: 'var(--s3)' }], yFormat: (v) => fmt$(v), height: 220, yLabel: 'Value Stack credits $ by month' });
   }
+  if ($('#chartSocMonthly')) barChart($('#chartSocMonthly'), { labels: MONTH_NAMES, series: [{ name: 'Average state of charge', values: backupRows(R).map((r) => r.avgKwh), color: 'var(--s3)' }], yFormat: (v) => fmtN(v) + ' kWh', height: 200, yLabel: 'average stored energy kWh by month' });
   const drawWeek = () => {
     const start = +$('#weekSel').value;
     const n = 7 * 96;
@@ -1163,7 +1211,7 @@ function afterResults() {
     }
   });
   $('#dlJson').addEventListener('click', () => {
-    const out = { project: { ...runIdentity(R), saved: savedInfo(R) }, inputs: stackConfig(), battery: R.battery, load: { label: R.load.label, source: R.load.source, stats: stats(R.load.kw) }, baseline: R.baseline, withBattery: R.withB, programRevenue: R.revenue, valueStackCredits: R.credits, electionComparison: R.alternative, capacityCurve: R.curve, summary: R.summary, generated: new Date().toISOString() };
+    const out = { project: { ...runIdentity(R), saved: savedInfo(R) }, inputs: stackConfig(), battery: R.battery, load: { label: R.load.label, source: R.load.source, stats: stats(R.load.kw) }, baseline: R.baseline, withBattery: R.withB, programRevenue: R.revenue, valueStackCredits: R.credits, electionComparison: R.alternative, capacityCurve: R.curve, stateOfCharge: { backupShareOfPeak: state.modality === 'ftm' ? null : BACKUP_SHARE, byMonth: backupRows(R) }, summary: R.summary, generated: new Date().toISOString() };
     download(`${fileSlug(state.project.name)}_results.json`, JSON.stringify(out, (k, v) => (v instanceof Float64Array || v instanceof Int32Array ? undefined : v), 1), 'application/json');
   });
   $('#dlDispatch').addEventListener('click', () => {
@@ -1184,7 +1232,7 @@ function runIdentity(R) {
     rate: `${accountLabel(R.stack.account)}${R.stack.valueStack ? '; Rider R A.9(d) with SC 11' : ''}`,
     area: `${state.region === 'nyc' ? 'New York City' : 'Westchester'} (zone ${R.stack.supply.zone})`,
     supply: SUPPLY_MODES[R.stack.supply.mode],
-    dr: (R.stack.valueStack ? `${{ value_stack: 'DRV kept', rider_t: 'Rider T instead of DRV', rider_ac: 'Rider AC instead of DRV' }[state.valueStack.election]}; ` : '') + (enrolled.length ? `${enrolled.join(' + ')}, ${fmtN(state.programs.pledgeKw)} kW pledged at ${state.programs.network}` : 'no programs'),
+    dr: (R.stack.valueStack ? `${{ value_stack: 'DRV kept', rider_t: 'Rider T instead of DRV', rider_ac: 'Rider AC instead of DRV' }[state.valueStack.election]}; ` : '') + (enrolled.length ? `${enrolled.join(' + ')}, ${fmtN(state.programs.pledgeKw)} kW pledged at ${state.programs.network}${R.stack.drOnly ? '; demand response only (no discharging for the bill)' : ''}` : 'no programs'),
     load: R.load.label,
   };
 }

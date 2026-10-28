@@ -5,6 +5,12 @@ The wizard's version is shown in the pro-forma (Wizard_Import, Project block).
 Every saved run records it too: a run saved by an earlier version opens with its inputs and a note to run it again.
 :::
 
+## 0.6 — October 2026
+
+- **Demand response only** behind the meter (Riders step, *Battery use*): the battery discharges only in program events, and the results compare it with optimising the bill as well.
+- **State of charge and backup** on the results page: the average stored energy by month, and the hours it would carry 25% of the month's peak load in an outage.
+- Between uses the battery now recharges early and stays ready when nothing else decides when it charges. Results move by cents.
+
 ## 0.5 — October 2026
 
 - **Monthly supply charges.** The MSC capacity charge, the merchant function charge and the MSC adjustment factors are each month's own statement (the last 12), not the latest one applied all year. A value entered on the Supply step still applies all year.

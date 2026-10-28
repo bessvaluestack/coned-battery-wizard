@@ -3,7 +3,7 @@
 // sheet, so the financial model can always tell which analysis (and which
 // configuration of it, by the fingerprint) its numbers came from.
 
-export const APP_VERSION = '0.5.0';
+export const APP_VERSION = '0.6.0';
 export const PROJECT_FORMAT = 'coned-battery-wizard/project';
 export const PROJECT_FILE_VERSION = 1;
 
@@ -76,6 +76,7 @@ export function runSnapshot(R, ratesDate) {
     billOnly: R.billOnlySol ? { imp: r3(R.billOnlySol.imp) } : null,
     alternative: R.alternative ? { net: R.alternative.net, billTotal: R.alternative.billTotal, credits: { totals: R.alternative.credits.totals, total: R.alternative.credits.total, alt3Kw: R.alternative.credits.alt3Kw } } : null,
     curve: R.curve || null,
+    coopt: R.coopt || null,
   };
 }
 

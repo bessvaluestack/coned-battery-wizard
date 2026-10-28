@@ -57,7 +57,11 @@ the Value Stack modalities pick an election instead of the riders.
    on the site's distribution network: Contracted Hours, county group, DLRP
    tier) and Rider AC Term-DLM or Auto-DLM (pay-as-bid, rates entered), in
    the tariff's combinations only. Pledge, participation and events per
-   season are scenario inputs.
+   season are scenario inputs. *Battery use*: the bill and demand response
+   together (the default), or demand response only, where the battery may
+   discharge only in the programs' event intervals (it still charges against
+   the bill) and a second solve of the combined dispatch is reported for
+   comparison.
    **Value Stack** (exports): the network (its CSRP call window sets the
    DRV hours), the election (keep the DRV and LSRV; or Rider T CSRP / DLRP,
    which ends them for good; or Rider AC Term- / Auto-DLM, which suspends
@@ -77,7 +81,9 @@ the Value Stack modalities pick an election instead of the riders.
    event hours / discharge efficiency, or kW below the pledge).
 6. **Results**: annual savings (bill savings + program revenue), the bill by
    component before and after, monthly peaks, a week of dispatch with state
-   of charge, assumptions and provenance, JSON / CSV export, and the owner
+   of charge, the average state of charge by month with the hours it would
+   carry 25% of the month's peak load (`backupByMonth` in `js/model.js`),
+   assumptions and provenance, JSON / CSV export, and the owner
    pro-forma (XLSX, below). CSRP or DLRP delivering under 80% of the pledge
    (weakest event) is flagged. With the Value Stack: the annual net benefit,
    the credits by component and month (energy, Alternative 3, DRV, LSRV),
@@ -219,7 +225,10 @@ node scripts/make_proforma_template.mjs doc/<workbook>.xlsx
   or the year (standby contract demand: one kW billed every month, chosen by
   the dispatch).
 - Dispatch: one LP over the whole year with the battery sizes fixed, cyclic
-  state of charge, an annual discharge budget, perfect foresight; program
+  state of charge, an annual discharge budget, perfect foresight, and a
+  tie-break ($4e-6 per kWh-hour stored, about $13 a year for 380 kWh) that
+  recharges early and stays ready when nothing else decides the timing, so
+  the state of charge means something for backup; program
   load relief as in the reference engine (`relief <= baseline - import +
   export`, delivered share = the worst event, reservation paid on the share,
   performance on relief kWh). When programs are enrolled behind the meter

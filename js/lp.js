@@ -9,12 +9,14 @@
 //      - sum_p [ resValue_p * D_p + perf_p * dt * sum_{t in perf} r_{p,t} ]
 //      - sum_t xprice_t * exp_t * dt          (Value Stack energy (+ DRV) credit)
 //      - alt3 * X - lsrv * sum_e F_e          (capacity and locational relief)
+//      - READY * dt * sum_t soc_t             (a tie-break: stay charged when idle)
 //   s.t. imp_t - exp_t - ch_t + dis_t = load_t                (exp = 0 without the Value Stack)
 //        soc_{t+1} = soc_t + (eta_c ch_t - dis_t / eta_d) dt, cyclic
 //        0 <= ch, dis <= P ; 0 <= soc <= E_usable
 //        imp (or the half-hour average) <= pk_k for every interval in window k
 //        sum_t dis_t dt <= cycles_per_year * E_nameplate
 //        programs: r <= load_t - imp_t + exp_t, r <= pledge, mean_e(r) >= D, D <= pledge
+//        demand response only: dis_t = 0 outside the programs' event intervals
 //        Value Stack: exp_t - imp_t >= X on the Alternative 3 commitment hours,
 //        exp_t - imp_t >= F_e in each LSRV event, exp_t <= dis_t and no charging
 //        in the DRV window (no grid pass-through)
@@ -27,6 +29,14 @@
 // each interval to import or export (see solveScenario).
 
 function f6(x) { return (Math.abs(x) < 5e-7 ? 0 : x).toFixed(6); }
+
+// When nothing else decides when the battery charges (prices flat within the
+// day, say), any timing costs the same and the solver would leave the state
+// of charge anywhere between uses. A reward this small (about $13 a year for
+// a 380 kWh battery held full) only breaks those ties: the battery charges
+// early and stays ready, as a controller holding a reserve would, so its
+// state of charge means something for backup.
+const READY = 4e-6; // $ per kWh-hour stored
 
 export function buildLP(inp) {
   const { load, price, peakTerms, battery, dt, demandIntervalMin, programs, taxFactor } = inp;
@@ -57,6 +67,7 @@ export function buildLP(inp) {
     if (X.lsrv) X.lsrv.events.forEach((ev, k) => term(-X.lsrv.perEvent, 'F' + k));
   }
   if (thr > 0) for (let t = 0; t < T; t++) term(thr * dt, 'd' + t);
+  for (let t = 0; t < T; t++) term(-READY * dt, 's' + t);
   peakTerms.forEach((k, j) => term(k.rate * tax, 'p' + j));
   if (programs) programs.forEach((pg, pi) => {
     term(-pg.reservationValuePerKw, 'D' + pi);
@@ -113,9 +124,10 @@ export function buildLP(inp) {
   push('Bounds');
   const zero = (list) => { const m = new Uint8Array(T); if (list) for (const t of list) m[t] = 1; return m; };
   const noCh = zero(X && X.noCharge), noImp = zero(X && X.fixImportZero), noExp = zero(X && X.fixExportZero);
+  const disOk = inp.dischargeAllowed ? zero(inp.dischargeAllowed) : null;
   for (let t = 0; t < T; t++) {
     push(` c${t} <= ${noCh[t] ? '0' : f6(P)}`);
-    push(` d${t} <= ${f6(P)}`);
+    push(` d${t} <= ${disOk && !disOk[t] ? '0' : f6(P)}`);
     push(` s${t} <= ${f6(usable)}`);
     if (noImp[t]) push(` i${t} <= 0`);
     if (X && noExp[t]) push(` e${t} <= 0`);
@@ -280,7 +292,7 @@ export function toHours(inp, approximate = false) {
   };
   const every = (a) => Float64Array.from({ length: H }, (_, h) => { let v = 0; for (let k = 0; k < S; k++) v += a[h * S + k]; return v / S; });
   const out = {
-    ...inp, load: every(inp.load), price: every(inp.price), dt: inp.dt * S, demandIntervalMin: 15,
+    ...inp, load: every(inp.load), price: every(inp.price), dt: inp.dt * S, demandIntervalMin: 15, dischargeAllowed: hours(inp.dischargeAllowed),
     peakTerms: inp.peakTerms.map((k) => ({ ...k, idx: hours(k.idx) })),
     programs: inp.programs && inp.programs.map((pg) => ({ ...pg, allIntervals: hours(pg.allIntervals), performanceIntervals: hours(pg.performanceIntervals), events: pg.events.map((e) => ({ intervals: hours(e.intervals) })) })),
     exports: X && {

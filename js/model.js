@@ -153,8 +153,11 @@ export function buildStack(cfg, data) {
   const programs = buildPrograms(cfg.programs || {}, data, cfg.zone || supply.zone, { riderR: !!valueStack });
 
   const taxFactor = 1 + (+cfg.taxPct || 0) / 100;
+  // Demand response only (behind the meter without exports): the battery
+  // discharges in program events and nowhere else.
+  const drOnly = modality === 'btm' && (cfg.programs || {}).dispatch === 'dr_only';
   return {
-    modality, account: acct, valueStack, notes, riderM,
+    modality, account: acct, valueStack, notes, riderM, drOnly,
     idx, tariff, ta, supply, charges, price, kwhAdj, kwhAdjDefault, programs, taxFactor,
     demandIntervalMin: cfg.demandIntervalMin === 15 ? 15 : 30,
     energyComponents: [
@@ -195,8 +198,10 @@ export function monthlyBills(stack, importKw) {
 }
 
 // LP inputs for the worker: merge every $/kW determinant that shares a
-// (month, window) into one peak term with the summed rate.
-export function lpInputs(stack, load, battery, withPrograms) {
+// (month, window) into one peak term with the summed rate. With `drOnly`
+// (the stack's choice unless given) the battery may discharge only in the
+// enrolled programs' event intervals: it still charges against the bill.
+export function lpInputs(stack, load, battery, withPrograms, { drOnly = stack.drOnly } = {}) {
   const groups = peakGroups(stack.charges, stack.idx);
   const merged = new Map();
   for (const g of groups) {
@@ -218,9 +223,15 @@ export function lpInputs(stack, load, battery, withPrograms) {
     });
     if (!programs.length) programs = null;
   }
+  let dischargeAllowed = null;
+  if (drOnly) {
+    const all = new Set();
+    for (const p of programs || []) for (const t of p.allIntervals) all.add(t);
+    dischargeAllowed = Int32Array.from([...all].sort((a, b) => a - b));
+  }
   return {
     load, price: stack.price, peakTerms, battery, dt: DT_HOURS, demandIntervalMin: stack.demandIntervalMin,
-    programs, taxFactor: stack.taxFactor, exports,
+    programs, taxFactor: stack.taxFactor, exports, dischargeAllowed,
   };
 }
 
@@ -376,4 +387,24 @@ export function programsByMonth(revenue, programMonths = {}) {
   }
   for (const id of Object.keys(terms)) for (const p of programs) for (const k of ['Res', 'Perf']) if (p[`${id}${k}`] === undefined) p[`${id}${k}`] = 0;
   return { programs, terms };
+}
+
+// What the battery holds through each month, and how long that would carry
+// a critical load of `share` of the month's peak in an outage. The dispatch
+// keeps nothing back for one: this is what normal operation leaves in the
+// battery at an average moment. A load above the battery's power is carried
+// only up to it.
+export function backupByMonth({ idx, soc, battery, peaks = null, share = 0.25 }) {
+  const usable = battery.kwh * battery.usableFrac, etaD = Math.sqrt(battery.rte);
+  return Array.from({ length: 12 }, (_, m) => {
+    const a = idx.monthStart[m], b = idx.monthStart[m + 1];
+    let s = 0; for (let t = a; t < b; t++) s += soc[t];
+    const avgKwh = s / (b - a);
+    const out = { month: MONTH_NAMES[m], avgKwh, avgShare: usable > 0 ? avgKwh / usable : 0 };
+    if (peaks) {
+      const loadKw = share * peaks[m], carriedKw = Math.min(loadKw, battery.kw);
+      Object.assign(out, { loadKw, carriedKw, powerLimited: battery.kw < loadKw, hours: carriedKw > 0 ? avgKwh * etaD / carriedKw : 0 });
+    }
+    return out;
+  });
 }
