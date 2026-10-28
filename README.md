@@ -307,7 +307,7 @@ Source: GitHub Actions).
 | File | Content | Source (paths in the reference engine's repo) |
 |---|---|---|
 | `tariffs_sc8.json` | SC 8 Rate I/II/III x LT/HT schedules with lineage | `config/tariffs/corpus_ced_sc8_*.yaml`, book `ny.ced.psc10@2026-08-01` (candidate) |
-| `statements.json` | SBC, MAC, RDM, SDR, MSC capacity (SC 8 and SC 9 Rates I-III), MFC, MSC adjustment factors, and the per-class adjustments (SC 2, 8, 9) | `config/supply/ny.ced.psc10.yaml` + `config/tariff_db/.../statements` |
+| `statements.json` | SBC, MAC, RDM, SDR, MSC capacity (SC 8 and SC 9 Rates I-III), MFC, MSC adjustment factors, the per-class adjustments (SC 2, 8, 9), and (`monthly`) the capacity charge, MFC and adjustment factors month by month, with the Rate II / III capacity windows | `config/supply/ny.ced.psc10.yaml` + `config/tariff_db/.../statements` |
 | `msc.json` | Observed MSC $/kWh per calendar day (codes 008CNV / 008TOD for SC 8, 009CNV / 009TOD for SC 9, zones J/H/I, all / on / off peak), 12 months to 2026-08 | MSC lookup dataset vintage 2026-09-25 |
 | `lbmp_{J,H,I}.json` | NYISO day-ahead hourly LBMP on the model year | `data/lbmp/<zone>.csv` (2025-07 to 2026-06) |
 | `programs.json` | CSRP / DLRP / Term-DLM / Auto-DLM terms and the 83-network table | `config/programs/ny.ced.psc10.yaml` |
@@ -329,6 +329,14 @@ node scripts/make_profiles.mjs
   is the Rider M exempt case and stays selectable).
 - MSC adjustment factors are included at the statement value for the supply
   mode and region (editable).
+- Supply statements by month (2026-10-28): the MSC capacity charge, the MFC
+  and the MSC adjustment factors are each month's own statement, November
+  2025 to October 2026 (`scripts/supply_statements.json`, read from Con
+  Edison's PDFs, source URL on each); one value entered applies all year.
+  Rates II and III bill capacity on the statement's weekday windows (8-18
+  June to September, 8-22 otherwise). Rider M customers pay no MSC
+  adjustment factors (their statement excludes Rider M); Rate II on the MSC
+  takes the "would be served under Rider M" reconciliation.
 - Program combinations follow the tariff (revised 2026-10-16): CSRP + DLRP
   or Term-DLM + DLRP, never CSRP + Term-DLM (Rider AC I.2). Both
   reservations are paid on the same pledge; an hour in both programs' events
@@ -369,10 +377,11 @@ node scripts/make_profiles.mjs
 
 ## Known simplifications
 
-- The MSC capacity charge and the Rider M ICAP tag are one monthly statement
-  value applied to every month's maximum demand (the real charge varies by
-  month and the tag by the customer's coincident-peak demand).
-- MSC adjustment factors are one monthly reconciliation value applied all year.
+- The supply charges are the last 12 monthly statements; the Rider M ICAP tag
+  is applied to each month's maximum demand (the real tag is the customer's
+  coincident-peak demand), or with the Value Stack to the likely peak hours.
+- MSC adjustment factors are taken as non-residential (with the tax
+  reimbursement recovery).
 - Delivery statements not compiled upstream (CES delivery surcharge, DLM
   surcharge, EV make-ready, arrears recovery) are not in the default
   adjustment; add them to the $/kWh override.

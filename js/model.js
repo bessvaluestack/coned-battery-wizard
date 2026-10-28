@@ -126,15 +126,22 @@ export function buildStack(cfg, data) {
   }
   const supply = buildSupply({ ...supplyCfg, region: cfg.region, zone: cfg.zone, sc: acct.sc, rateNo: acct.rateNo, mfcDefault: bc.mfc, icapTag: !!valueStack }, { ...data, tariff });
   const charges = [...ta.demandCharges];
-  if (supply.capacityRate > 0) {
+  // The supply capacity charge, each month at its own rate.
+  const capRates = supply.capacityByMonth;
+  if (capRates.some((r) => r > 0)) {
     if (valueStack && supply.mode === 'coned_mhp') {
       // The Rider M capacity tag is the account's demand in the NYISO peak
       // hour: priced over the same likely peak hours the battery commits for
-      // Alternative 3.
+      // Alternative 3, and billed every month at that month's tag rate.
       const mask = new Uint8Array(idx.T); for (const t of valueStack.alt3.intervals) mask[t] = 1;
-      charges.push(makeCharge(idx, { name: 'Supply capacity (ICAP tag, likely peak hours)', rate: supply.capacityRate, period: 'year', mask, windowKey: 'icap_tag', group: 'supply_capacity' }));
+      charges.push(makeCharge(idx, { name: 'Supply capacity (ICAP tag, likely peak hours)', monthRates: capRates, period: 'year', mask, windowKey: 'icap_tag', group: 'supply_capacity' }));
+    } else if (supply.capacityWindows) {
+      // Rates II and III: weekday windows, by season.
+      for (const w of supply.capacityWindows) {
+        charges.push(makeCharge(idx, { name: `Supply capacity (weekdays ${w.hours[0]}-${w.hours[1]})`, monthRates: capRates, months: w.months, days: w.days, hours: w.hours, group: 'supply_capacity' }));
+      }
     } else {
-      charges.push(makeCharge(idx, { name: 'Supply capacity (monthly max)', rate: supply.capacityRate, group: 'supply_capacity' }));
+      charges.push(makeCharge(idx, { name: 'Supply capacity (monthly max)', monthRates: capRates, group: 'supply_capacity' }));
     }
   }
 

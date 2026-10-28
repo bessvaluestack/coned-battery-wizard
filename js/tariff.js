@@ -57,10 +57,14 @@ export function buildTariffArrays(tariff, opts = {}) {
 
 // A demand charge with an explicit day/hour mask (month handled per billing
 // month), or an explicit interval mask (`mask`, e.g. the likely system-peak
-// hours an ICAP tag is measured in) with its own `windowKey`.
+// hours an ICAP tag is measured in) with its own `windowKey`. `monthRates`
+// (12 values, January first) bills each month at its own rate; `rate` is
+// then their average, for display.
 export function makeCharge(idx, c) {
+  const monthRates = c.monthRates ? c.monthRates.map(Number) : null;
   return {
-    name: c.name, rate: +c.rate, months: c.months || [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    name: c.name, rate: monthRates ? monthRates.reduce((a, r) => a + r, 0) / 12 : +c.rate, monthRates,
+    months: c.months || [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
     days: c.days || 'all', hours: c.hours || null,
     mask: c.mask || andMasks(dayMask(idx, c.days || 'all'), hourMask(idx, c.hours || null)),
     group: c.group || 'other_demand', determinant: c.determinant || null,
@@ -77,17 +81,18 @@ export function peakGroups(charges, idx) {
   const out = [];
   for (const ch of charges) {
     const wk = `${ch.period}|${ch.windowKey}`;
+    const rateIn = (m) => (ch.monthRates ? ch.monthRates[m - 1] : ch.rate);
     if (ch.period === 'year') {
       const pos = [];
       for (const m of ch.months) for (let t = idx.monthStart[m - 1]; t < idx.monthStart[m]; t++) if (ch.mask[t]) pos.push(t);
-      if (pos.length) out.push({ charge: ch, key: `y|${wk}`, month: ch.months[0], idx: Int32Array.from(pos), alloc: ch.months.map((m) => [m, ch.rate]) });
+      if (pos.length) out.push({ charge: ch, key: `y|${wk}`, month: ch.months[0], idx: Int32Array.from(pos), alloc: ch.months.map((m) => [m, rateIn(m)]) });
       continue;
     }
     for (const m of ch.months) {
       const a = idx.monthStart[m - 1], b = idx.monthStart[m];
       if (ch.period === 'day') {
         let day = -1, pos = [];
-        const flush = () => { if (pos.length) out.push({ charge: ch, key: `d${day}|${wk}`, month: m, day, idx: Int32Array.from(pos), alloc: [[m, ch.rate]] }); pos = []; };
+        const flush = () => { if (pos.length) out.push({ charge: ch, key: `d${day}|${wk}`, month: m, day, idx: Int32Array.from(pos), alloc: [[m, rateIn(m)]] }); pos = []; };
         for (let t = a; t < b; t++) {
           if (idx.doy[t] !== day) { flush(); day = idx.doy[t]; }
           if (ch.mask[t]) pos.push(t);
@@ -97,7 +102,7 @@ export function peakGroups(charges, idx) {
       }
       const pos = [];
       for (let t = a; t < b; t++) if (ch.mask[t]) pos.push(t);
-      if (pos.length) out.push({ charge: ch, key: `m${m}|${wk}`, month: m, idx: Int32Array.from(pos), alloc: [[m, ch.rate]] });
+      if (pos.length) out.push({ charge: ch, key: `m${m}|${wk}`, month: m, idx: Int32Array.from(pos), alloc: [[m, rateIn(m)]] });
     }
   }
   for (const g of out) g.rate = g.alloc.reduce((a, [, r]) => a + r, 0);

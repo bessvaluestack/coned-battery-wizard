@@ -40,20 +40,22 @@ test('SC 9 supply and surcharges: its own MSC series and capacity charge, SBC an
   assert.equal(s1.account.sc, 9);
   assert.equal(s1.riderM, false, 'standard SC 9 can take the MSC');
   assert.match(s1.supply.description, /009CNV/);
-  assert.equal(s1.supply.capacityRate, 14.32);
+  const M = st.monthly.msc_capacity_usd_per_kw_month;
+  assert.deepEqual(s1.supply.capacityByMonth, M.nyc.sc9.rate1);
+  assert.equal(M.nyc.sc9.rate1[6], 14.32);
   near(s1.kwhAdjDefault, k.sbc_total_nyserda.value + k.mac.value + k.mac_adjustment_factor.value + bc.kwh.rdm + bc.kwh.sdr, 'per-kWh adjustments');
   const b1 = billFor(s1, flat(100));
-  near(b1.demandByGroup.supply_capacity, 14.32 * 12 * 100, 'MSC capacity');
+  near(b1.demandByGroup.supply_capacity, M.nyc.sc9.rate1.reduce((a, r) => a + r, 0) * 100, 'MSC capacity, by month');
   near(b1.demandByGroup.delivery_adjustment_demand, bc.kw.rate1.monthly_max_demand_kw * 12 * 100, 'SBC on the monthly max');
-  assert.equal(buildStack(sc9(3), data).supply.capacityRate, 14.63);
+  assert.deepEqual(buildStack(sc9(3), data).supply.capacityByMonth, M.nyc.sc9.rate3);
   const s2 = buildStack(sc9(2), data);
   assert.match(s2.supply.description, /009TOD/);
-  assert.equal(s2.supply.capacityRate, 19.26);
+  assert.deepEqual(s2.supply.capacityByMonth, M.nyc.sc9.rate2);
   const sbc = s2.charges.find((c) => c.group === 'delivery_adjustment_demand');
   assert.equal(sbc.rate, bc.kw.tod.tod_demand_kw);
   assert.deepEqual(sbc.hours, [8, 22]);
   // Westchester.
-  assert.equal(buildStack(sc9(1, { region: 'westchester', zone: 'H' }), data).supply.capacityRate, 5.23);
+  assert.deepEqual(buildStack(sc9(1, { region: 'westchester', zone: 'H' }), data).supply.capacityByMonth, M.westchester.sc9.rate1);
 });
 
 test('SC 9 accounts: a building on standby stays there; an exporting battery moves a large building to SC 9 standby', () => {

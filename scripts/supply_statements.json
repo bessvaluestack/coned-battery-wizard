@@ -1,0 +1,815 @@
+{
+ "note": "Con Edison supply statements under PSC No. 10, one per month from November 2025 to October 2026, read from the published PDFs (url on each) and checked against the text: the Statement of Market Supply Charge - Capacity ($/kW-month, SC 8 and SC 9 Rates I-III by area, and the Rider M ICAP tag), the Statement of Merchant Function Charge (total, $/kWh; the statements before February 2026 print cents) and the Summary of Statements of Adjustment Factors - MSC (MSC I by zone and use, MSC II by Rider M status). The reconciliation a customer pays is MSC I residential + MSC II; a non-residential customer also pays the Tax Reimbursement Recovery Provision, the difference between the non-residential and residential MSC I. Customers served under Rider M pay none of the adjustment factors.",
+ "rates_ii_iii_capacity_windows": "SC 8 and SC 9 Rates II and III: capacity charges are applicable Monday through Friday, 8 AM to 6 PM, in June to September, and Monday through Friday, 8 AM to 10 PM, in all other months (the ** note on every statement).",
+ "adjustment_source": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/adjustment-factors-msc/mscadj-2023-present.pdf",
+ "msc_capacity": [
+  {
+   "no": 127,
+   "effective": "2025-11-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/msc-cap/msccap-202511.pdf",
+   "sc8": {
+    "nyc": {
+     "rate1": 10.96,
+     "rate2": 12.97,
+     "rate3": 11.05
+    },
+    "westchester": {
+     "rate1": 5.85,
+     "rate2": 6.92,
+     "rate3": 5.9
+    }
+   },
+   "sc9": {
+    "nyc": {
+     "rate1": 6.51,
+     "rate2": 8.13,
+     "rate3": 6.28
+    },
+    "westchester": {
+     "rate1": 3.47,
+     "rate2": 4.34,
+     "rate3": 3.35
+    }
+   },
+   "rider_m_icap_tag": {
+    "nyc": 5.82,
+    "westchester": 2.39
+   }
+  },
+  {
+   "no": 128,
+   "effective": "2025-12-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/msc-cap/msccap-202512.pdf",
+   "sc8": {
+    "nyc": {
+     "rate1": 10.96,
+     "rate2": 12.97,
+     "rate3": 11.05
+    },
+    "westchester": {
+     "rate1": 5.85,
+     "rate2": 6.92,
+     "rate3": 5.9
+    }
+   },
+   "sc9": {
+    "nyc": {
+     "rate1": 6.51,
+     "rate2": 8.13,
+     "rate3": 6.28
+    },
+    "westchester": {
+     "rate1": 3.47,
+     "rate2": 4.34,
+     "rate3": 3.35
+    }
+   },
+   "rider_m_icap_tag": {
+    "nyc": 6.73,
+    "westchester": 4.11
+   }
+  },
+  {
+   "no": 129,
+   "effective": "2026-01-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/msc-cap/msccap-202601.pdf",
+   "sc8": {
+    "nyc": {
+     "rate1": 10.96,
+     "rate2": 12.97,
+     "rate3": 11.05
+    },
+    "westchester": {
+     "rate1": 5.85,
+     "rate2": 6.92,
+     "rate3": 5.9
+    }
+   },
+   "sc9": {
+    "nyc": {
+     "rate1": 6.51,
+     "rate2": 8.13,
+     "rate3": 6.28
+    },
+    "westchester": {
+     "rate1": 3.47,
+     "rate2": 4.34,
+     "rate3": 3.35
+    }
+   },
+   "rider_m_icap_tag": {
+    "nyc": 7.02,
+    "westchester": 4.94
+   }
+  },
+  {
+   "no": 130,
+   "effective": "2026-02-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/msc-cap/msccap-202602.pdf",
+   "sc8": {
+    "nyc": {
+     "rate1": 10.96,
+     "rate2": 12.97,
+     "rate3": 11.05
+    },
+    "westchester": {
+     "rate1": 5.85,
+     "rate2": 6.92,
+     "rate3": 5.9
+    }
+   },
+   "sc9": {
+    "nyc": {
+     "rate1": 6.51,
+     "rate2": 8.13,
+     "rate3": 6.28
+    },
+    "westchester": {
+     "rate1": 3.47,
+     "rate2": 4.34,
+     "rate3": 3.35
+    }
+   },
+   "rider_m_icap_tag": {
+    "nyc": 6.87,
+    "westchester": 4.8
+   }
+  },
+  {
+   "no": 131,
+   "effective": "2026-03-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/msc-cap/msccap-202603.pdf",
+   "sc8": {
+    "nyc": {
+     "rate1": 10.96,
+     "rate2": 12.97,
+     "rate3": 11.05
+    },
+    "westchester": {
+     "rate1": 5.85,
+     "rate2": 6.92,
+     "rate3": 5.9
+    }
+   },
+   "sc9": {
+    "nyc": {
+     "rate1": 6.51,
+     "rate2": 8.13,
+     "rate3": 6.28
+    },
+    "westchester": {
+     "rate1": 3.47,
+     "rate2": 4.34,
+     "rate3": 3.35
+    }
+   },
+   "rider_m_icap_tag": {
+    "nyc": 5.99,
+    "westchester": 2.41
+   }
+  },
+  {
+   "no": 132,
+   "effective": "2026-04-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/msc-cap/msccap-202604.pdf",
+   "sc8": {
+    "nyc": {
+     "rate1": 10.96,
+     "rate2": 12.97,
+     "rate3": 11.05
+    },
+    "westchester": {
+     "rate1": 5.85,
+     "rate2": 6.92,
+     "rate3": 5.9
+    }
+   },
+   "sc9": {
+    "nyc": {
+     "rate1": 6.51,
+     "rate2": 8.13,
+     "rate3": 6.28
+    },
+    "westchester": {
+     "rate1": 3.47,
+     "rate2": 4.34,
+     "rate3": 3.35
+    }
+   },
+   "rider_m_icap_tag": {
+    "nyc": 5.97,
+    "westchester": 2.23
+   }
+  },
+  {
+   "no": 133,
+   "effective": "2026-05-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/msc-cap/msccap-202605.pdf",
+   "sc8": {
+    "nyc": {
+     "rate1": 22.87,
+     "rate2": 25.81,
+     "rate3": 23.26
+    },
+    "westchester": {
+     "rate1": 8.35,
+     "rate2": 9.42,
+     "rate3": 8.49
+    }
+   },
+   "sc9": {
+    "nyc": {
+     "rate1": 14.32,
+     "rate2": 19.26,
+     "rate3": 14.63
+    },
+    "westchester": {
+     "rate1": 5.23,
+     "rate2": 7.03,
+     "rate3": 5.34
+    }
+   },
+   "rider_m_icap_tag": {
+    "nyc": 28.94,
+    "westchester": 8.24
+   }
+  },
+  {
+   "no": 134,
+   "effective": "2026-06-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/msc-cap/msccap-202606.pdf",
+   "sc8": {
+    "nyc": {
+     "rate1": 22.87,
+     "rate2": 25.81,
+     "rate3": 23.26
+    },
+    "westchester": {
+     "rate1": 8.35,
+     "rate2": 9.42,
+     "rate3": 8.49
+    }
+   },
+   "sc9": {
+    "nyc": {
+     "rate1": 14.32,
+     "rate2": 19.26,
+     "rate3": 14.63
+    },
+    "westchester": {
+     "rate1": 5.23,
+     "rate2": 7.03,
+     "rate3": 5.34
+    }
+   },
+   "rider_m_icap_tag": {
+    "nyc": 27.58,
+    "westchester": 9.14
+   }
+  },
+  {
+   "no": 135,
+   "effective": "2026-07-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/msc-cap/msccap-202607.pdf",
+   "sc8": {
+    "nyc": {
+     "rate1": 22.87,
+     "rate2": 25.81,
+     "rate3": 23.26
+    },
+    "westchester": {
+     "rate1": 8.35,
+     "rate2": 9.42,
+     "rate3": 8.49
+    }
+   },
+   "sc9": {
+    "nyc": {
+     "rate1": 14.32,
+     "rate2": 19.26,
+     "rate3": 14.63
+    },
+    "westchester": {
+     "rate1": 5.23,
+     "rate2": 7.03,
+     "rate3": 5.34
+    }
+   },
+   "rider_m_icap_tag": {
+    "nyc": 13.73,
+    "westchester": 5.85
+   }
+  },
+  {
+   "no": 136,
+   "effective": "2026-08-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/msc-cap/msccap-202608.pdf",
+   "sc8": {
+    "nyc": {
+     "rate1": 22.87,
+     "rate2": 25.81,
+     "rate3": 23.26
+    },
+    "westchester": {
+     "rate1": 8.35,
+     "rate2": 9.42,
+     "rate3": 8.49
+    }
+   },
+   "sc9": {
+    "nyc": {
+     "rate1": 14.32,
+     "rate2": 19.26,
+     "rate3": 14.63
+    },
+    "westchester": {
+     "rate1": 5.23,
+     "rate2": 7.03,
+     "rate3": 5.34
+    }
+   },
+   "rider_m_icap_tag": {
+    "nyc": 12.42,
+    "westchester": 5.59
+   }
+  },
+  {
+   "no": 137,
+   "effective": "2026-09-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/msc-cap/msccap-202609.pdf",
+   "sc8": {
+    "nyc": {
+     "rate1": 22.87,
+     "rate2": 25.81,
+     "rate3": 23.26
+    },
+    "westchester": {
+     "rate1": 8.35,
+     "rate2": 9.42,
+     "rate3": 8.49
+    }
+   },
+   "sc9": {
+    "nyc": {
+     "rate1": 14.32,
+     "rate2": 19.26,
+     "rate3": 14.63
+    },
+    "westchester": {
+     "rate1": 5.23,
+     "rate2": 7.03,
+     "rate3": 5.34
+    }
+   },
+   "rider_m_icap_tag": {
+    "nyc": 12.45,
+    "westchester": 5.4
+   }
+  },
+  {
+   "no": 138,
+   "effective": "2026-10-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/msc-cap/msccap-202610.pdf",
+   "sc8": {
+    "nyc": {
+     "rate1": 22.87,
+     "rate2": 25.81,
+     "rate3": 23.26
+    },
+    "westchester": {
+     "rate1": 8.35,
+     "rate2": 9.42,
+     "rate3": 8.49
+    }
+   },
+   "sc9": {
+    "nyc": {
+     "rate1": 14.32,
+     "rate2": 19.26,
+     "rate3": 14.63
+    },
+    "westchester": {
+     "rate1": 5.23,
+     "rate2": 7.03,
+     "rate3": 5.34
+    }
+   },
+   "rider_m_icap_tag": {
+    "nyc": 12.8,
+    "westchester": 6.71
+   }
+  }
+ ],
+ "mfc": [
+  {
+   "no": 170,
+   "effective": "2025-11-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/merchant-function-charge/mfc-202511.pdf",
+   "unit_in_statement": "cents/kWh",
+   "sc1_total": 0.004262,
+   "sc2_total": 0.002905,
+   "scs5_6_8_9_12_13_total": 0.001365
+  },
+  {
+   "no": 171,
+   "effective": "2025-12-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/merchant-function-charge/mfc-202512.pdf",
+   "unit_in_statement": "cents/kWh",
+   "sc1_total": 0.003697,
+   "sc2_total": 0.002774,
+   "scs5_6_8_9_12_13_total": 0.001234
+  },
+  {
+   "no": 172,
+   "effective": "2026-01-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/merchant-function-charge/mfc-202601.pdf",
+   "unit_in_statement": "cents/kWh",
+   "sc1_total": 0.003821,
+   "sc2_total": 0.002817,
+   "scs5_6_8_9_12_13_total": 0.001277
+  },
+  {
+   "no": 173,
+   "effective": "2026-02-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/merchant-function-charge/mfc-202602.pdf",
+   "unit_in_statement": "$/kWh",
+   "sc1_total": 0.005553,
+   "sc2_total": 0.00464,
+   "scs5_6_8_9_12_13_total": 0.002289
+  },
+  {
+   "no": 174,
+   "effective": "2026-03-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/merchant-function-charge/mfc-202603.pdf",
+   "unit_in_statement": "$/kWh",
+   "sc1_total": 0.006113,
+   "sc2_total": 0.004717,
+   "scs5_6_8_9_12_13_total": 0.002366
+  },
+  {
+   "no": 175,
+   "effective": "2026-04-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/merchant-function-charge/mfc-202604.pdf",
+   "unit_in_statement": "$/kWh",
+   "sc1_total": 0.00614,
+   "sc2_total": 0.005246,
+   "scs5_6_8_9_12_13_total": 0.002895
+  },
+  {
+   "no": 176,
+   "effective": "2026-05-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/merchant-function-charge/mfc-202605.pdf",
+   "unit_in_statement": "$/kWh",
+   "sc1_total": 0.005053,
+   "sc2_total": 0.004496,
+   "scs5_6_8_9_12_13_total": 0.002145
+  },
+  {
+   "no": 177,
+   "effective": "2026-06-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/merchant-function-charge/mfc-202606.pdf",
+   "unit_in_statement": "$/kWh",
+   "sc1_total": 0.005139,
+   "sc2_total": 0.00444,
+   "scs5_6_8_9_12_13_total": 0.002089
+  },
+  {
+   "no": 178,
+   "effective": "2026-07-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/merchant-function-charge/mfc-202607.pdf",
+   "unit_in_statement": "$/kWh",
+   "sc1_total": 0.005132,
+   "sc2_total": 0.004505,
+   "scs5_6_8_9_12_13_total": 0.002154
+  },
+  {
+   "no": 179,
+   "effective": "2026-08-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/merchant-function-charge/mfc-202608.pdf",
+   "unit_in_statement": "$/kWh",
+   "sc1_total": 0.005393,
+   "sc2_total": 0.004466,
+   "scs5_6_8_9_12_13_total": 0.002115
+  },
+  {
+   "no": 180,
+   "effective": "2026-09-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/merchant-function-charge/mfc-202609.pdf",
+   "unit_in_statement": "$/kWh",
+   "sc1_total": 0.006204,
+   "sc2_total": 0.004607,
+   "scs5_6_8_9_12_13_total": 0.002256
+  },
+  {
+   "no": 181,
+   "effective": "2026-10-01",
+   "url": "https://www.coned.com/-/media/files/coned/documents/rates/electric/psc-10/supply/merchant-function-charge/mfc-202610.pdf",
+   "unit_in_statement": "$/kWh",
+   "sc1_total": 0.006482,
+   "sc2_total": 0.004605,
+   "scs5_6_8_9_12_13_total": 0.002254
+  }
+ ],
+ "msc_adjustment": [
+  {
+   "effective": "2025-11-12",
+   "msc1_residential": {
+    "nyc": 0.008803,
+    "westchester": 0.020765
+   },
+   "msc1_nonresidential": {
+    "nyc": 0.0092,
+    "westchester": 0.021162
+   },
+   "msc2_would_be_rider_m": 0.003125,
+   "msc2_all_other": 0.008358,
+   "reconciliation_all_other": {
+    "nyc": 0.017161,
+    "westchester": 0.029123
+   },
+   "reconciliation_would_be_rider_m": {
+    "nyc": 0.011928,
+    "westchester": 0.02389
+   },
+   "tax_reimbursement_recovery_nonresidential": {
+    "nyc": 0.000397,
+    "westchester": 0.000397
+   }
+  },
+  {
+   "effective": "2025-12-15",
+   "msc1_residential": {
+    "nyc": 0.00173,
+    "westchester": 0.006773
+   },
+   "msc1_nonresidential": {
+    "nyc": 0.001994,
+    "westchester": 0.007037
+   },
+   "msc2_would_be_rider_m": -0.004335,
+   "msc2_all_other": -0.001189,
+   "reconciliation_all_other": {
+    "nyc": 0.000541,
+    "westchester": 0.005584
+   },
+   "reconciliation_would_be_rider_m": {
+    "nyc": -0.002605,
+    "westchester": 0.002438
+   },
+   "tax_reimbursement_recovery_nonresidential": {
+    "nyc": 0.000264,
+    "westchester": 0.000264
+   }
+  },
+  {
+   "effective": "2026-01-14",
+   "msc1_residential": {
+    "nyc": -0.004642,
+    "westchester": 0.010012
+   },
+   "msc1_nonresidential": {
+    "nyc": -0.004214,
+    "westchester": 0.01044
+   },
+   "msc2_would_be_rider_m": -0.000346,
+   "msc2_all_other": -0.007812,
+   "reconciliation_all_other": {
+    "nyc": -0.012454,
+    "westchester": 0.0022
+   },
+   "reconciliation_would_be_rider_m": {
+    "nyc": -0.004988,
+    "westchester": 0.009666
+   },
+   "tax_reimbursement_recovery_nonresidential": {
+    "nyc": 0.000428,
+    "westchester": 0.000428
+   }
+  },
+  {
+   "effective": "2026-02-13",
+   "msc1_residential": {
+    "nyc": 0.044752,
+    "westchester": 0.055918
+   },
+   "msc1_nonresidential": {
+    "nyc": 0.045374,
+    "westchester": 0.05654
+   },
+   "msc2_would_be_rider_m": -0.000194,
+   "msc2_all_other": -0.046631,
+   "reconciliation_all_other": {
+    "nyc": -0.001879,
+    "westchester": 0.009287
+   },
+   "reconciliation_would_be_rider_m": {
+    "nyc": 0.044558,
+    "westchester": 0.055724
+   },
+   "tax_reimbursement_recovery_nonresidential": {
+    "nyc": 0.000622,
+    "westchester": 0.000622
+   }
+  },
+  {
+   "effective": "2026-03-17",
+   "msc1_residential": {
+    "nyc": -0.046707,
+    "westchester": -0.037686
+   },
+   "msc1_nonresidential": {
+    "nyc": -0.045678,
+    "westchester": -0.036657
+   },
+   "msc2_would_be_rider_m": 0.002554,
+   "msc2_all_other": 0.06509,
+   "reconciliation_all_other": {
+    "nyc": 0.018383,
+    "westchester": 0.027404
+   },
+   "reconciliation_would_be_rider_m": {
+    "nyc": -0.044153,
+    "westchester": -0.035132
+   },
+   "tax_reimbursement_recovery_nonresidential": {
+    "nyc": 0.001029,
+    "westchester": 0.001029
+   }
+  },
+  {
+   "effective": "2026-04-15",
+   "msc1_residential": {
+    "nyc": -0.012002,
+    "westchester": -0.003976
+   },
+   "msc1_nonresidential": {
+    "nyc": -0.011054,
+    "westchester": -0.003028
+   },
+   "msc2_would_be_rider_m": 0.003233,
+   "msc2_all_other": 0.079343,
+   "reconciliation_all_other": {
+    "nyc": 0.067341,
+    "westchester": 0.075367
+   },
+   "reconciliation_would_be_rider_m": {
+    "nyc": -0.008769,
+    "westchester": -0.000743
+   },
+   "tax_reimbursement_recovery_nonresidential": {
+    "nyc": 0.000948,
+    "westchester": 0.000948
+   }
+  },
+  {
+   "effective": "2026-05-14",
+   "msc1_residential": {
+    "nyc": 0.025109,
+    "westchester": 0.026669
+   },
+   "msc1_nonresidential": {
+    "nyc": 0.025346,
+    "westchester": 0.026906
+   },
+   "msc2_would_be_rider_m": 0.009176,
+   "msc2_all_other": -0.001115,
+   "reconciliation_all_other": {
+    "nyc": 0.023994,
+    "westchester": 0.025554
+   },
+   "reconciliation_would_be_rider_m": {
+    "nyc": 0.034285,
+    "westchester": 0.035845
+   },
+   "tax_reimbursement_recovery_nonresidential": {
+    "nyc": 0.000237,
+    "westchester": 0.000237
+   }
+  },
+  {
+   "effective": "2026-06-15",
+   "msc1_residential": {
+    "nyc": 0.024767,
+    "westchester": 0.02516
+   },
+   "msc1_nonresidential": {
+    "nyc": 0.025071,
+    "westchester": 0.025464
+   },
+   "msc2_would_be_rider_m": 0.011517,
+   "msc2_all_other": -0.006245,
+   "reconciliation_all_other": {
+    "nyc": 0.018522,
+    "westchester": 0.018915
+   },
+   "reconciliation_would_be_rider_m": {
+    "nyc": 0.036284,
+    "westchester": 0.036677
+   },
+   "tax_reimbursement_recovery_nonresidential": {
+    "nyc": 0.000304,
+    "westchester": 0.000304
+   }
+  },
+  {
+   "effective": "2026-07-15",
+   "msc1_residential": {
+    "nyc": 0.024996,
+    "westchester": 0.025159
+   },
+   "msc1_nonresidential": {
+    "nyc": 0.025258,
+    "westchester": 0.025421
+   },
+   "msc2_would_be_rider_m": 0.008545,
+   "msc2_all_other": -0.00727,
+   "reconciliation_all_other": {
+    "nyc": 0.017726,
+    "westchester": 0.017889
+   },
+   "reconciliation_would_be_rider_m": {
+    "nyc": 0.033541,
+    "westchester": 0.033704
+   },
+   "tax_reimbursement_recovery_nonresidential": {
+    "nyc": 0.000262,
+    "westchester": 0.000262
+   }
+  },
+  {
+   "effective": "2026-08-13",
+   "msc1_residential": {
+    "nyc": 0.005458,
+    "westchester": 0.037687
+   },
+   "msc1_nonresidential": {
+    "nyc": 0.005829,
+    "westchester": 0.038058
+   },
+   "msc2_would_be_rider_m": 0.000881,
+   "msc2_all_other": -0.011343,
+   "reconciliation_all_other": {
+    "nyc": -0.005885,
+    "westchester": 0.026344
+   },
+   "reconciliation_would_be_rider_m": {
+    "nyc": 0.006339,
+    "westchester": 0.038568
+   },
+   "tax_reimbursement_recovery_nonresidential": {
+    "nyc": 0.000371,
+    "westchester": 0.000371
+   }
+  },
+  {
+   "effective": "2026-09-14",
+   "msc1_residential": {
+    "nyc": -0.038014,
+    "westchester": -0.009712
+   },
+   "msc1_nonresidential": {
+    "nyc": -0.037673,
+    "westchester": -0.009371
+   },
+   "msc2_would_be_rider_m": 0.00182,
+   "msc2_all_other": 0.011785,
+   "reconciliation_all_other": {
+    "nyc": -0.026229,
+    "westchester": 0.002073
+   },
+   "reconciliation_would_be_rider_m": {
+    "nyc": -0.036194,
+    "westchester": -0.007892
+   },
+   "tax_reimbursement_recovery_nonresidential": {
+    "nyc": 0.000341,
+    "westchester": 0.000341
+   }
+  },
+  {
+   "effective": "2026-10-14",
+   "msc1_residential": {
+    "nyc": -0.019648,
+    "westchester": 0.014404
+   },
+   "msc1_nonresidential": {
+    "nyc": -0.01921,
+    "westchester": 0.014842
+   },
+   "msc2_would_be_rider_m": 0.001394,
+   "msc2_all_other": 0.006123,
+   "reconciliation_all_other": {
+    "nyc": -0.013525,
+    "westchester": 0.020527
+   },
+   "reconciliation_would_be_rider_m": {
+    "nyc": -0.018254,
+    "westchester": 0.015798
+   },
+   "tax_reimbursement_recovery_nonresidential": {
+    "nyc": 0.000438,
+    "westchester": 0.000438
+   }
+  }
+ ]
+}

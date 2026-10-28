@@ -12,8 +12,9 @@ The wizard follows Con Edison's filed tariff and published statements, the NY SI
 
 ## Bill
 
-- The MSC capacity charge and the Rider M capacity tag are one monthly statement value applied to every month's maximum demand. The real charge varies by month, and the tag by the customer's demand at the system peak. With the Value Stack, the tag is priced on the import in the likely peak hours instead.
-- The MSC adjustment factors are one monthly reconciliation value applied all year.
+- The capacity charge, the MFC and the MSC adjustment factors are the last 12 statements, one per month; next year's will differ.
+- The Rider M capacity tag is applied to each month's maximum demand, where the real tag is the customer's demand at the previous year's system peak. With the Value Stack, the tag is priced on the import in the likely peak hours instead.
+- The MSC adjustment factors are taken as non-residential: they include the tax reimbursement recovery.
 - Some delivery statements are not in the default per-kWh adjustment: the CES delivery surcharge, the DLM surcharge, EV make-ready and arrears recovery. Add them to the $/kWh override on the [Rate](rate.md#delivery-adjustments-advanced) step if needed.
 - Taxes are one editable percentage, 2.5% by default. A commercial SC 9 account generally also pays sales tax; add it if it applies.
 - **Reactive power charges** (General Rule 10.11) are not applied.

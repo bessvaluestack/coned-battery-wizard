@@ -10,7 +10,8 @@ Writes into data/:
                       plus the standby Rates IV / V
   statements.json     surcharges + utility supply components (SBC, MAC, RDM,
                       SDR, MSC capacity by service class, MFC, MSC adjustment
-                      factors)
+                      factors), the supply ones also month by month from
+                      scripts/supply_statements.json
   msc.json            observed Market Supply Charge, daily $/kWh laid onto
                       the model year (codes 008CNV / 008TOD for SC 8,
                       009CNV / 009TOD for SC 9, zones J/H/I, windows all /
@@ -242,6 +243,32 @@ def main() -> None:
                                    + (row_value(sdr_rows, "sc_9_rates_iv_and_v.contract_demand_kw") or 0)}},
                 "mfc": pick("MFC", "scs5_6_8_9_12_13_total_merchant_function_charge_all")},
         "note": "Standby contract-demand adjustments are the SBC and SDR contract-demand rows; standby schedules carry no SDR $/kWh.",
+    }
+    # The supply statements month by month (scripts/supply_statements.json,
+    # read from Con Edison's PDFs): the latest issue for each calendar month
+    # of the MSC capacity charge, the merchant function charge and the MSC
+    # adjustment factors, so each model month is billed at its own values.
+    sup_hist = json.loads((HERE / "supply_statements.json").read_text())
+
+    def by_month(rows: list[dict]) -> list[dict]:
+        out = {}
+        for r in sorted(rows, key=lambda r: r["effective"]):
+            out[int(r["effective"][5:7])] = r
+        if sorted(out) != list(range(1, 13)):
+            sys.exit(f"supply statements cover months {sorted(out)}; all twelve are needed")
+        return [out[m] for m in range(1, 13)]
+
+    cap, mfc, adj = by_month(sup_hist["msc_capacity"]), by_month(sup_hist["mfc"]), by_month(sup_hist["msc_adjustment"])
+    areas = ("nyc", "westchester")
+    statements["monthly"] = {
+        "effective": {"msc_capacity": [r["effective"] for r in cap], "mfc": [r["effective"] for r in mfc], "msc_adjustment": [r["effective"] for r in adj]},
+        "msc_capacity_usd_per_kw_month": {a: {**{f"sc{sc}": {f"rate{n}": [r[f"sc{sc}"][a][f"rate{n}"] for r in cap] for n in (1, 2, 3)} for sc in (8, 9)},
+                                              "rider_m_icap_tag": [r["rider_m_icap_tag"][a] for r in cap]} for a in areas},
+        "mfc_usd_per_kwh": {"sc2": [r["sc2_total"] for r in mfc], "scs5_6_8_9_12_13": [r["scs5_6_8_9_12_13_total"] for r in mfc]},
+        "msc_adjustment_usd_per_kwh": {k: {a: [r[k][a] for r in adj] for a in areas}
+                                       for k in ("reconciliation_all_other", "reconciliation_would_be_rider_m", "tax_reimbursement_recovery_nonresidential")},
+        "capacity_windows_rates_ii_iii": [{"months": [6, 7, 8, 9], "days": "weekdays", "hours": [8, 18]},
+                                          {"months": [1, 2, 3, 4, 5, 10, 11, 12], "days": "weekdays", "hours": [8, 22]}],
     }
     (OUT / "statements.json").write_text(json.dumps(statements, indent=1))
     print("statements written")

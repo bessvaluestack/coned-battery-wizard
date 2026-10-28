@@ -449,24 +449,32 @@ async function stepRate() {
 async function stepSupply() {
   const stack = getStack();
   const sup = stack.supply, S = state.supply, st = data.statements;
-  const vs = !!stack.valueStack, mfcDefault = st.by_class[`sc${stack.account.sc}`].mfc;
-  const capBasis = vs && sup.mode === 'coned_mhp' ? 'on the import in the likely NYISO peak hours (the ICAP tag)' : 'on the monthly max';
-  const cap = st.msc_capacity_usd_per_kw_month[state.region];
-  const capMsc = (cap[`sc${stack.account.sc}`] || {})[`rate${stack.account.rateNo}`] ?? '';
-  const adjRow = st.msc_adjustment_factors_usd_per_kwh;
+  const vs = !!stack.valueStack;
+  const capBasis = vs && sup.mode === 'coned_mhp' ? 'on the import in the likely NYISO peak hours (the ICAP tag)' : sup.capacityWindows ? 'on weekday demand 8-18 (Jun-Sep) / 8-22' : 'on the monthly max';
+  const area = state.region === 'nyc' ? 'NYC' : 'Westchester';
+  // The statements behind each month's default, November to October.
+  const eff = st.monthly.effective.msc_capacity, first = eff.reduce((a, d) => (d < a ? d : a)), last = eff.reduce((a, d) => (d > a ? d : a));
+  const monthName = (d) => `${MONTH_NAMES[+d.slice(5, 7) - 1]} ${d.slice(0, 4)}`;
+  const span = (a, d) => (Math.min(...a) === Math.max(...a) ? a[0].toFixed(d) : `${Math.min(...a).toFixed(d)} to ${Math.max(...a).toFixed(d)}`);
+  const byMonthNote = `Blank = each month's own statement (${monthName(first)} to ${monthName(last)}); a value here applies all year.`;
+  const monthTable = () => `<details><summary>Statement values by month</summary><div class="tablewrap"><table><thead><tr><th>Month</th><th class="num">Capacity $/kW-mo</th><th class="num">MFC $/kWh</th>${sup.mode === 'coned_msc' ? '<th class="num">MSC adjustment $/kWh</th><th class="num">Tax reimbursement $/kWh</th>' : ''}</tr></thead><tbody>
+    ${MONTH_NAMES.map((n, m) => `<tr><td>${n}</td><td class="num">${sup.capacityByMonth[m].toFixed(2)}</td><td class="num">${sup.mfcByMonth[m].toFixed(6)}</td>${sup.mode === 'coned_msc' ? `<td class="num">${sup.reconciliationByMonth[m].toFixed(6)}</td><td class="num">${sup.taxReimbursementByMonth[m].toFixed(6)}</td>` : ''}</tr>`).join('')}
+    </tbody></table></div></details>`;
   const monthlyAvg = (() => { const idx = stack.idx; const s = new Array(12).fill(0), n = new Array(12).fill(0); for (let t = 0; t < idx.T; t++) { s[idx.month[t] - 1] += sup.energyRate[t]; n[idx.month[t] - 1]++; } return s.map((v, i) => v / n[i]); })();
   const fields = {
     coned_msc: `<div class="grid2">
-        ${field('MSC capacity charge', numInput('supply.capacityRate', S.capacityRate, { step: 0.01, unit: '$/kW-mo', nullable: true, placeholder: capMsc }), `Statement value for SC ${stack.account.sc} Rate ${roman[stack.account.rateNo]}, ${state.region === 'nyc' ? 'NYC' : 'Westchester'}: ${capMsc} $/kW-month (one monthly statement; summer months run higher). Blank = statement value.`)}
-        ${field('Merchant function charge', numInput('supply.mfc', S.mfc, { step: 0.000001, unit: '$/kWh', nullable: true, placeholder: mfcDefault }), 'SCs 5, 6, 8, 9, 12, 13 total MFC.')}
-        ${field('MSC adjustment factors', numInput('supply.reconciliation', S.reconciliation, { step: 0.000001, unit: '$/kWh', nullable: true, placeholder: adjRow.reconciliation_all_other_nonresidential[state.region] }), `Month-specific reconciliation; the current statement prints ${adjRow.reconciliation_all_other_nonresidential[state.region]} $/kWh for non-residential "all other" in ${state.region === 'nyc' ? 'NYC' : 'Westchester'}. Blank = statement value.`)}
+        ${field('MSC capacity charge', numInput('supply.capacityRate', S.capacityRate, { step: 0.01, unit: '$/kW-mo', nullable: true, placeholder: 'by month' }), `SC ${stack.account.sc} Rate ${roman[stack.account.rateNo]}, ${area}: ${span(sup.capacityByMonth, 2)} $/kW-month${sup.capacityWindows ? ', on weekday demand 8 AM to 6 PM in June to September and 8 AM to 10 PM otherwise' : ', on the monthly maximum demand'}. ${byMonthNote}`)}
+        ${field('Merchant function charge', numInput('supply.mfc', S.mfc, { step: 0.000001, unit: '$/kWh', nullable: true, placeholder: 'by month' }), `${stack.account.sc === 2 ? 'SC 2' : 'SCs 5, 6, 8, 9, 12, 13'} total, ${span(sup.mfcByMonth, 6)} $/kWh. ${byMonthNote}`)}
+        ${field('MSC adjustment factors', numInput('supply.reconciliation', S.reconciliation, { step: 0.000001, unit: '$/kWh', nullable: true, placeholder: 'by month' }), `Each month's MSC reconciliation for ${stack.account.rateNo === 2 ? 'customers who would be on Rider M but for its exemptions (Rate II)' : 'all other customers'}, ${area}: ${span(sup.reconciliationByMonth, 6)} $/kWh, plus the tax reimbursement non-residential customers pay. ${byMonthNote}`)}
       </div>
+      ${monthTable()}
       <p class="note">Rider M makes hourly pricing mandatory above a size it sets; this tool does not check that. If the account is on Rider M, choose hourly pricing.</p>`,
     coned_mhp: `<div class="grid2">
-        ${field('Rider M capacity (ICAP tag)', numInput('supply.capacityRate', S.capacityRate, { step: 0.01, unit: '$/kW-mo', nullable: true, placeholder: cap.rider_m_icap_tag }), vs ? `Statement value ${cap.rider_m_icap_tag} $/kW-month, billed every month on the most the account imports in the likely NYISO peak hours (the Alternative 3 commitment hours on the Value Stack step), which is how the tag is set.` : `Statement value ${cap.rider_m_icap_tag} $/kW-month, applied to each month's maximum demand (simplification of the tag).`)}
-        ${field('Merchant function charge', numInput('supply.mfc', S.mfc, { step: 0.000001, unit: '$/kWh', nullable: true, placeholder: mfcDefault }))}
-        ${field('MSC adjustment factors', numInput('supply.reconciliation', S.reconciliation, { step: 0.000001, unit: '$/kWh', nullable: true, placeholder: adjRow.reconciliation_rider_m_nonresidential[state.region] }), `Rider M non-residential statement value: ${adjRow.reconciliation_rider_m_nonresidential[state.region]} $/kWh. Blank = statement value.`)}
-      </div>`,
+        ${field('Rider M capacity (ICAP tag)', numInput('supply.capacityRate', S.capacityRate, { step: 0.01, unit: '$/kW-mo', nullable: true, placeholder: 'by month' }), `${area}: ${span(sup.capacityByMonth, 2)} $/kW-month, ${vs ? 'billed every month on the most the account imports in the likely NYISO peak hours (the Alternative 3 commitment hours on the Value Stack step), which is how the tag is set' : "applied to each month's maximum demand (a simplification of the tag)"}. ${byMonthNote}`)}
+        ${field('Merchant function charge', numInput('supply.mfc', S.mfc, { step: 0.000001, unit: '$/kWh', nullable: true, placeholder: 'by month' }), `${stack.account.sc === 2 ? 'SC 2' : 'SCs 5, 6, 8, 9, 12, 13'} total, ${span(sup.mfcByMonth, 6)} $/kWh. ${byMonthNote}`)}
+        ${field('MSC adjustment factors', numInput('supply.reconciliation', S.reconciliation, { step: 0.000001, unit: '$/kWh', nullable: true, placeholder: '0' }), 'Not billed under Rider M: the Statement of Adjustment Factors applies to customers on the MSC. Enter a value only to add one.')}
+      </div>
+      ${monthTable()}`,
     esco_fixed: `<div class="grid2">
         ${field('Fixed supply price', numInput('supply.fixedRate', S.fixedRate, { step: 0.0001, unit: '$/kWh' }), 'All-in energy price from the ESCO contract.')}
         ${field('Separate capacity charge', numInput('supply.escoCapacity', S.escoCapacity, { step: 0.01, unit: '$/kW-mo' }), 'Leave 0 if capacity is bundled in the $/kWh.')}
@@ -496,7 +504,7 @@ async function stepSupply() {
       <p class="note">${esc(sup.description)}</p>
       <div class="kpis">
         <div class="kpi"><div class="k">Average energy</div><div class="v">${(sup.avgEnergyRate * 100).toFixed(2)}&cent;</div><div class="s">per kWh, load-unweighted</div></div>
-        <div class="kpi"><div class="k">Capacity</div><div class="v">${fmt$(sup.capacityRate, 2)}</div><div class="s">per kW-month ${capBasis}</div></div>
+        <div class="kpi"><div class="k">Capacity</div><div class="v">${fmt$(sup.capacityRate, 2)}</div><div class="s">per kW-month, average of the months, ${capBasis}</div></div>
         ${sup.lbmpAvg ? `<div class="kpi"><div class="k">Zone ${sup.zone} LBMP</div><div class="v">${(sup.lbmpAvg * 100).toFixed(2)}&cent;</div><div class="s">average, ${esc(data.lbmp[sup.zone].source_span.map((s) => s.slice(0, 7)).join(' to '))}</div></div>` : ''}
       </div>
       ${sup.warnings.map((w) => `<p class="flag">${esc(w)}</p>`).join('')}
@@ -1419,7 +1427,7 @@ async function renderRail() {
     <div class="card"><h4>Scenario</h4><dl>
       <dt>Modality</dt><dd>${esc(MODALITIES[state.modality])}</dd>
       <dt>${ftm ? 'Account' : 'Rate'}</dt><dd>${stack ? accountLabel(stack.account) : `SC ${state.serviceClass || 8} Rate ${roman[state.rateNo]} ${state.voltage.toUpperCase()}`}, ${state.region === 'nyc' ? 'NYC' : 'Westchester'} (zone ${state.zone})</dd>
-      <dt>Supply</dt><dd>${stack ? esc(SUPPLY_MODES[stack.supply.mode]) : esc(SUPPLY_MODES[state.supply.mode])}${stack ? `, ${(stack.supply.avgEnergyRate * 100).toFixed(1)}¢/kWh avg, ${fmt$(stack.supply.capacityRate, 2)}/kW-mo` : ''}</dd>
+      <dt>Supply</dt><dd>${stack ? esc(SUPPLY_MODES[stack.supply.mode]) : esc(SUPPLY_MODES[state.supply.mode])}${stack ? `, ${(stack.supply.avgEnergyRate * 100).toFixed(1)}¢/kWh avg, ${fmt$(stack.supply.capacityRate, 2)}/kW-mo avg` : ''}</dd>
       ${exportsOn(state.modality) ? `<dt>Value Stack</dt><dd>${{ value_stack: 'DRV kept', rider_t: 'Rider T instead of DRV', rider_ac: 'Rider AC instead of DRV' }[state.valueStack.election]}${state.programs.network ? `, ${esc(state.programs.network)}` : ''}</dd>` : ''}
       <dt>Programs</dt><dd>${enrolled.join(', ') || 'none'}${stack && stack.programs.network && enrolled.length ? ` at ${esc(stack.programs.network.name)}, ${fmtN(state.programs.pledgeKw)} kW` : ''}</dd>
       <dt>Load</dt><dd>${ftm ? 'none (stand-alone)' : load ? `${esc(load.label)}<br>${fmtN(s.annualKwh / 1000)} MWh, ${fmtN(s.peakKw)} kW peak` : 'not set'}</dd>

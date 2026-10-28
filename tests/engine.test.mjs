@@ -54,23 +54,43 @@ test('30-minute billing demand averages aligned pairs', () => {
   assert.equal(peakOf(imp, pos, 30), 150);
 });
 
-test('stack: Rate I NYC with Con Ed MSC supply prices every interval', () => {
+test('stack: Rate I NYC with Con Ed MSC supply: each month at its own statement values', () => {
   const cfg = { rateNo: 1, voltage: 'lt', region: 'nyc', zone: 'J', demandIntervalMin: 30, taxPct: 2.5, supply: { mode: 'coned_msc' }, programs: {} };
+  const M = data.statements.monthly;
   const s = buildStack(cfg, data);
   assert.equal(s.price.length, T);
   assert.ok(s.supply.avgEnergyRate > 0.04 && s.supply.avgEnergyRate < 0.12, `avg supply ${s.supply.avgEnergyRate}`);
-  assert.ok(s.supply.capacityRate === 22.87);
-  // MSC adjustment factors default to the statement value (NYC, all other non-residential)
-  const adj = s.supply.components.find((c) => c.name === 'MSC adjustment factors');
-  assert.ok(adj && Math.abs(adj.rate - data.statements.msc_adjustment_factors_usd_per_kwh.reconciliation_all_other_nonresidential.nyc) < 1e-12);
+  // Capacity: the winter and summer capability periods' statements.
+  const cap = M.msc_capacity_usd_per_kw_month.nyc.sc8.rate1;
+  assert.deepEqual(s.supply.capacityByMonth, cap);
+  assert.equal(cap[0], 10.96); assert.equal(cap[6], 22.87);
+  assert.equal(s.supply.capacityWindows, null, 'Rate I: the monthly max');
+  // MFC and the adjustment factors (all other customers, plus the tax reimbursement), by month.
+  const at = (name, t) => { const c = s.supply.components.find((x) => x.name === name); return typeof c.rate === 'number' ? c.rate : c.rate[t]; };
+  const july = data.statements.monthly && buildIndex().monthStart[6];
+  assert.equal(at('Merchant function charge', july), M.mfc_usd_per_kwh.scs5_6_8_9_12_13[6]);
+  assert.equal(at('MSC adjustment factors', 0), M.msc_adjustment_usd_per_kwh.reconciliation_all_other.nyc[0]);
+  assert.equal(at('Tax reimbursement recovery', july), M.msc_adjustment_usd_per_kwh.tax_reimbursement_recovery_nonresidential.nyc[6]);
+  // Rider M: the tag by month, and no MSC adjustment factors.
   const mhp = buildStack({ ...cfg, rateNo: 2, supply: { mode: 'coned_mhp' } }, data);
-  const adj2 = mhp.supply.components.find((c) => c.name === 'MSC adjustment factors');
-  assert.ok(adj2 && Math.abs(adj2.rate - data.statements.msc_adjustment_factors_usd_per_kwh.reconciliation_rider_m_nonresidential.nyc) < 1e-12);
-  assert.equal(mhp.supply.capacityRate, 12.45);
+  assert.deepEqual(mhp.supply.capacityByMonth, M.msc_capacity_usd_per_kw_month.nyc.rider_m_icap_tag);
+  assert.ok(!mhp.supply.components.some((c) => c.name === 'MSC adjustment factors' || c.name === 'Tax reimbursement recovery'));
+  // Rate II on the MSC (Rider M exempt): its own reconciliation; capacity in the weekday windows.
+  const tod = buildStack({ ...cfg, rateNo: 2, supply: { mode: 'coned_msc' } }, data);
+  assert.equal(tod.supply.components.find((c) => c.name === 'MSC adjustment factors').rate[0], M.msc_adjustment_usd_per_kwh.reconciliation_would_be_rider_m.nyc[0]);
+  const capCharges = tod.charges.filter((c) => c.group === 'supply_capacity');
+  assert.deepEqual(capCharges.map((c) => [c.months.length, c.days, c.hours]), [[4, 'weekdays', [8, 18]], [8, 'weekdays', [8, 22]]]);
+  // An override is one value all year.
+  assert.deepEqual(buildStack({ ...cfg, supply: { mode: 'coned_msc', capacityRate: 15, mfc: 0.002 } }, data).supply.capacityByMonth, new Array(12).fill(15));
   const load = new Float64Array(T).fill(100);
   const b = billFor(s, load);
   assert.ok(b.total > b.subtotal && Math.abs(b.tax - 0.025 * b.subtotal) < 1e-6);
-  assert.ok(b.demandByGroup.supply_capacity === 22.87 * 12 * 100);
+  assert.ok(Math.abs(b.demandByGroup.supply_capacity - cap.reduce((a, r) => a + r, 0) * 100) < 1e-6, 'each month at its own rate');
+  // Rate II: a 300 kW weekend spike in July misses the weekday capacity window.
+  const spike = Float64Array.from(load); const idx = buildIndex();
+  for (let t = idx.monthStart[6]; t < idx.monthStart[7]; t++) if (idx.dow[t] === 6 && idx.hour[t] === 10) spike[t] = 300;
+  const july2 = billFor(tod, spike).peaks.filter((p) => p.group === 'supply_capacity' && p.month === 7);
+  assert.ok(july2.length === 1 && Math.abs(july2[0].peakKw - 100) < 1e-9 && july2[0].rate === M.msc_capacity_usd_per_kw_month.nyc.sc8.rate2[6]);
 });
 
 test('dispatch LP: a 50 kW / 100 kWh battery shaves a 2-hour 50 kW spike (short horizon)', async () => {

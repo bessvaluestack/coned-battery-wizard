@@ -5,6 +5,12 @@ The wizard's version is shown in the pro-forma (Wizard_Import, Project block).
 Every saved run records it too: a run saved by an earlier version opens with its inputs and a note to run it again.
 :::
 
+## 0.5 — October 2026
+
+- **Monthly supply charges.** The MSC capacity charge, the merchant function charge and the MSC adjustment factors are each month's own statement (the last 12), not the latest one applied all year. A value entered on the Supply step still applies all year.
+- On Rates II and III the MSC capacity charge bills on the weekday time-of-day demand the statement names, not the all-hours peak.
+- No MSC adjustment factors under Rider M hourly pricing, as their statement says; Rate II on the MSC takes the factor for customers exempt from Rider M.
+
 ## 0.4 — October 2026
 
 - **SC 9 buildings.** The building's account can be SC 8 (Rates I to III) or SC 9 (Rates I to V), with SC 9's own supply prices, capacity charge and surcharges.
