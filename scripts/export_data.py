@@ -1,23 +1,25 @@
 #!/usr/bin/env python
-"""One-time exporter: pull the Con Edison SC 8 inputs out of the reference
-engine's repo (the upstream tariff model) into plain JSON files this
-static app can fetch.
+"""One-time exporter: pull the Con Edison SC 8 / SC 9 inputs out of the
+reference engine's repo (the upstream tariff model) into plain JSON files
+this static app can fetch.
 
     <engine-repo>/.venv/bin/python scripts/export_data.py --source <engine-repo>
 
 Writes into data/:
   tariffs_sc8.json    the six compiled SC 8 schedules (Rate I/II/III x LT/HT)
                       plus the standby Rates IV / V
-  statements_sc8.json surcharges + utility supply components (SBC, MAC, RDM,
-                      SDR, MSC capacity, MFC, MSC adjustment factors)
-  msc_sc8.json        observed Market Supply Charge, daily $/kWh laid onto
-                      the model year (codes 008CNV / 008TOD, zones J/H/I,
-                      windows all / on_peak / off_peak)
+  statements.json     surcharges + utility supply components (SBC, MAC, RDM,
+                      SDR, MSC capacity by service class, MFC, MSC adjustment
+                      factors)
+  msc.json            observed Market Supply Charge, daily $/kWh laid onto
+                      the model year (codes 008CNV / 008TOD for SC 8,
+                      009CNV / 009TOD for SC 9, zones J/H/I, windows all /
+                      on_peak / off_peak)
   lbmp_<Z>.json       NYISO day-ahead zonal LBMP, 8,760 hourly $/MWh on the
                       model year, zones J, H, I
   programs.json       Rider T (CSRP / DLRP) and Rider AC (Term-DLM) terms +
                       the network table (Contracted Hours, DLRP tier, group)
-  tariffs_sc9.json    SC 9 Rates I / III (compiled) and the standby Rates IV / V
+  tariffs_sc9.json    SC 9 Rates I / II / III (compiled) and the standby Rates IV / V
   tariffs_sc2.json    SC 2 Rate I (the charging account of a battery of 10 kW or less)
   value_stack.json    Rider R Value Stack terms: loss factor, Alternative 3 by
                       month, DRV rate and call window by network, LSRV
@@ -128,7 +130,7 @@ def main() -> None:
     (OUT / "tariffs_sc8.json").write_text(json.dumps(tariffs, indent=1))
     print("tariffs:", list(tariffs))
 
-    sc9 = compiled("corpus_ced_sc9_rate[13]_*.yaml")
+    sc9 = compiled("corpus_ced_sc9_rate[123]_*.yaml")
     for book_id, out_id in [("ny.ced.psc10.sc9.rate4.lt.leaf452_2", "corpus_ced_sc9_rate4_lt"), ("ny.ced.psc10.sc9.rate4.ht.leaf452_2", "corpus_ced_sc9_rate4_ht"),
                             ("ny.ced.psc10.sc9.rate5.lt", "corpus_ced_sc9_rate5_lt"), ("ny.ced.psc10.sc9.rate5.ht_below138", "corpus_ced_sc9_rate5_ht")]:
         sc9[out_id] = standby(book_id, out_id, "SC 9")
@@ -192,11 +194,9 @@ def main() -> None:
         },
         "msc_capacity_usd_per_kw_month": {
             "note": "Statement of Market Supply Charge - Capacity (one monthly statement, not a 12-month profile); billed on the monthly maximum demand of full-service customers",
-            "nyc": {"rate1": pick("MSC CAP", "sc8_rate_i_nyc"), "rate2": pick("MSC CAP", "sc8_rate_ii_nyc"),
-                    "rate3": pick("MSC CAP", "sc8_rate_iii_nyc"), "rider_m_icap_tag": pick("MSC CAP", "rider_m_icap_tag_nyc")},
-            "westchester": {"rate1": pick("MSC CAP", "sc8_rate_i_westchester"), "rate2": pick("MSC CAP", "sc8_rate_ii_westchester"),
-                            "rate3": pick("MSC CAP", "sc8_rate_iii_westchester"),
-                            "rider_m_icap_tag": pick("MSC CAP", "rider_m_icap_tag_westchester")},
+            **{area: {**{f"sc{sc}": {f"rate{n}": pick("MSC CAP", f"sc{sc}_rate_{roman}_{area}") for n, roman in ((1, "i"), (2, "ii"), (3, "iii"))}
+                         for sc in (8, 9)},
+                      "rider_m_icap_tag": pick("MSC CAP", f"rider_m_icap_tag_{area}")} for area in ("nyc", "westchester")},
         },
         "merchant_function_charge_usd_per_kwh": {
             "scs5_6_8_9_12_13_total": pick("MFC", "scs5_6_8_9_12_13_total_merchant_function_charge_all"),
@@ -243,7 +243,7 @@ def main() -> None:
                 "mfc": pick("MFC", "scs5_6_8_9_12_13_total_merchant_function_charge_all")},
         "note": "Standby contract-demand adjustments are the SBC and SDR contract-demand rows; standby schedules carry no SDR $/kWh.",
     }
-    (OUT / "statements_sc8.json").write_text(json.dumps(statements, indent=1))
+    (OUT / "statements.json").write_text(json.dumps(statements, indent=1))
     print("statements written")
 
     # ---- MSC lookup (daily) ---------------------------------------------
@@ -254,7 +254,7 @@ def main() -> None:
     msc = {"vintage": vin["vintage"], "document_id": vin["manifest"].get("document_id"),
            "date_range": vin["manifest"].get("date_range"), "lookback_months": 12,
            "model_year_days": len(daily_idx), "codes": {}}
-    for code in ("008CNV", "008TOD"):
+    for code in ("008CNV", "008TOD", "009CNV", "009TOD"):
         series = load_series(vin["dir"], code)
         zones = {}
         for zone in ("J", "H", "I"):
@@ -268,7 +268,7 @@ def main() -> None:
                 wins[win] = [round(float(x), 6) for x in onto_model_year(dm, daily_idx)]
             zones[zone] = {"windows": wins, "lookback": {k: info_any.get(k) for k in ("from", "to", "periods")}}
         msc["codes"][code] = {"description": vin["codes"][code]["description"], "zones": zones}
-    (OUT / "msc_sc8.json").write_text(json.dumps(msc))
+    (OUT / "msc.json").write_text(json.dumps(msc))
     print("msc written")
 
     # ---- LBMP (hourly, model year) --------------------------------------

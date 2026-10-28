@@ -14,7 +14,7 @@ import { LAYOUT, CURVE_COLS, colOf, WIZ_SHEET } from '../js/wizardsheet.js';
 
 const read = (p) => JSON.parse(readFileSync(new URL('../data/' + p, import.meta.url), 'utf8'));
 const data = {
-  tariffs: { ...read('tariffs_sc8.json'), ...read('tariffs_sc9.json'), ...read('tariffs_sc2.json') }, statements: read('statements_sc8.json'), msc: read('msc_sc8.json'),
+  tariffs: { ...read('tariffs_sc8.json'), ...read('tariffs_sc9.json'), ...read('tariffs_sc2.json') }, statements: read('statements.json'), msc: read('msc.json'),
   lbmp: { J: read('lbmp_J.json'), H: read('lbmp_H.json'), I: read('lbmp_I.json') }, programs: read('programs.json'), valueStack: read('value_stack.json'),
 };
 const template = readFileSync(new URL('../templates/proforma.xlsx', import.meta.url));

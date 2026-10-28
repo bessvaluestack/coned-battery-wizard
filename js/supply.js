@@ -23,9 +23,10 @@ export const SUPPLY_MODES = {
   esco_lbmp: 'Third-party supply, LBMP + adder',
 };
 
-export function mscCodeFor(rateNo) {
-  // codes.yaml: 008CNV = SC 8 Rates I, III, IV; 008TOD = Rates II and V (Rider M exempt)
-  return rateNo === 2 ? '008TOD' : '008CNV';
+export function mscCodeFor(sc, rateNo) {
+  // codes.yaml: 008CNV = SC 8 Rates I, III, IV; 008TOD = Rates II and V (Rider M
+  // exempt); 009CNV / 009TOD the same for SC 9.
+  return `00${sc}${rateNo === 2 || rateNo === 5 ? 'TOD' : 'CNV'}`;
 }
 
 export function mscWindowFor(rateNo) {
@@ -64,7 +65,7 @@ export function hourlyToIntervals(hourly) {
 export function mean(arr) { let s = 0; for (let i = 0; i < arr.length; i++) s += arr[i]; return s / arr.length; }
 
 /**
- * @param cfg  { mode, region: 'nyc'|'westchester', zone: 'J'|'H'|'I', rateNo: 1|2|3 (SC 8), mfcDefault,
+ * @param cfg  { mode, region: 'nyc'|'westchester', zone: 'J'|'H'|'I', sc: 8|9, rateNo: 1|2|3, mfcDefault,
  *               capacityRate (override $/kW-month or null), mfc ($/kWh), reconciliation ($/kWh),
  *               taxReimbursement ($/kWh), fixedRate ($/kWh), adder ($/kWh), escoCapacity ($/kW-month) }
  * @param data { msc, lbmp: {J,H,I}, statements, tariff }
@@ -96,8 +97,11 @@ export function buildSupply(cfg, data) {
   const lbmpHourly = data.lbmp[zone] && data.lbmp[zone].hourly;
 
   if (cfg.mode === 'coned_msc') {
-    const code = mscCodeFor(cfg.rateNo);
+    const sc = cfg.sc || 8;
+    const code = mscCodeFor(sc, cfg.rateNo);
     const win = mscWindowFor(cfg.rateNo);
+    const cap = (st.msc_capacity_usd_per_kw_month[region][`sc${sc}`] || {})[`rate${cfg.rateNo}`];
+    if (!data.msc.codes[code] || cap === undefined) throw new Error(`no Market Supply Charge for SC ${sc} Rate ${cfg.rateNo}`);
     const z = data.msc.codes[code].zones[zone];
     if (win === 'all') {
       energyMarket = dailyToIntervals(z.windows.all);
@@ -107,10 +111,10 @@ export function buildSupply(cfg, data) {
       energyMarket = new Float64Array(T);
       for (let t = 0; t < T; t++) energyMarket[t] = mask[t] ? on[t] : off[t];
     }
-    capacityRate = num(cfg.capacityRate, st.msc_capacity_usd_per_kw_month[region][`rate${cfg.rateNo}`]);
+    capacityRate = num(cfg.capacityRate, cap);
     components.push({ name: 'Market Supply Charge (energy)', rate: energyMarket });
-    description = `Con Edison MSC lookup ${code}/${win}, zone ${zone}, billed ${z.lookback.from} to ${z.lookback.to} (${z.lookback.periods} billing periods)${mscProvenance(data.msc)}; capacity ${capacityRate.toFixed(2)} $/kW-month on the monthly max demand (statement value for ${region === 'nyc' ? 'NYC' : 'Westchester'}, Rate ${['', 'I', 'II', 'III'][cfg.rateNo]})`;
-    if (cfg.rateNo === 2) warnings.push('Rate II customers are normally on Rider M hourly pricing; the 008TOD series is the Rider M exempt MSC.');
+    description = `Con Edison MSC lookup ${code}/${win}, zone ${zone}, billed ${z.lookback.from} to ${z.lookback.to} (${z.lookback.periods} billing periods)${mscProvenance(data.msc)}; capacity ${capacityRate.toFixed(2)} $/kW-month on the monthly max demand (statement value for ${region === 'nyc' ? 'NYC' : 'Westchester'}, SC ${sc} Rate ${['', 'I', 'II', 'III'][cfg.rateNo]})`;
+    if (cfg.rateNo === 2) warnings.push(`Rate II customers are normally on Rider M hourly pricing; the ${code} series is the Rider M exempt MSC.`);
   } else if (cfg.mode === 'coned_mhp') {
     if (!lbmpHourly) throw new Error(`no LBMP data for zone ${zone}`);
     const lb = hourlyToIntervals(lbmpHourly);

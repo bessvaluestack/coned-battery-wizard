@@ -29,7 +29,7 @@ const STORAGE_KEY = 'coned-battery-wizard.v1';
 
 const DEFAULTS = {
   step: 0, project: null, modality: 'btm', ftmRateNo: 1,
-  rateNo: 1, voltage: 'lt', region: 'nyc', zone: 'J', demandIntervalMin: 15, taxPct: 2.5,
+  serviceClass: 8, rateNo: 1, voltage: 'lt', region: 'nyc', zone: 'J', demandIntervalMin: 15, taxPct: 2.5,
   adjustments: { kwh: null, sbcDemand: true, extraDemand: 0 },
   supply: { mode: 'coned_msc', capacityRate: null, mfc: null, reconciliation: null, taxReimbursement: null, fixedRate: 0.09, adder: 0.02, escoCapacity: 0 },
   programs: { enabled: { csrp: false, dlrp: false, term_dlm: false, auto_dlm: false }, network: '', pledgeKw: 100, participation: 'direct', events: { csrp: 3, dlrp: 2, term_dlm: 3, auto_dlm: 3 }, termDlm: { reservationRate: '', performanceRate: '' }, autoDlm: { reservationRate: '', performanceRate: '' } },
@@ -49,7 +49,7 @@ const $ = (sel) => document.querySelector(sel);
 const fmt$ = (v, d = 0) => (v < 0 ? '-' : '') + '$' + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 const fmtN = (v, d = 0) => (+v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const roman = { 1: 'I', 2: 'II', 3: 'III' };
+const roman = { 1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V' };
 // An input problem the user can fix: shown verbatim in every edition.
 const userError = (msg) => Object.assign(new Error(msg), { user: true });
 
@@ -77,7 +77,7 @@ function setPath(obj, path, v) { const ks = path.split('.'); let o = obj; for (c
 async function loadData() {
   const get = (p) => fetch(p).then((r) => { if (!r.ok) throw new Error(`${p}: ${r.status}`); return r.json(); });
   const [sc8, sc9, sc2, statements, msc, J, H, I, programs, presets, valueStack] = await Promise.all([
-    get('data/tariffs_sc8.json'), get('data/tariffs_sc9.json'), get('data/tariffs_sc2.json'), get('data/statements_sc8.json'), get('data/msc_sc8.json'),
+    get('data/tariffs_sc8.json'), get('data/tariffs_sc9.json'), get('data/tariffs_sc2.json'), get('data/statements.json'), get('data/msc.json'),
     get('data/lbmp_J.json'), get('data/lbmp_H.json'), get('data/lbmp_I.json'), get('data/programs.json'), get('data/profiles/index.json'),
     get('data/value_stack.json'),
   ]);
@@ -109,19 +109,20 @@ function stackConfig() {
   const vs = exportsOn(modality);
   const peak = buildingPeak(), batteryKw = +s.battery.kw || 0;
   return {
-    modality, rateNo: +s.rateNo, voltage: s.voltage, region: s.region, zone: s.zone, demandIntervalMin: +s.demandIntervalMin, taxPct: +s.taxPct || 0,
-    account: chargingAccount({ modality, rateNo: modality === 'ftm' ? +s.ftmRateNo : +s.rateNo, voltage: s.voltage, batteryKw, buildingPeakKw: peak }),
+    modality, serviceClass: +s.serviceClass || 8, rateNo: +s.rateNo, voltage: s.voltage, region: s.region, zone: s.zone, demandIntervalMin: +s.demandIntervalMin, taxPct: +s.taxPct || 0,
+    account: chargingAccount({ modality, sc: +s.serviceClass || 8, rateNo: modality === 'ftm' ? +s.ftmRateNo : +s.rateNo, voltage: s.voltage, batteryKw, buildingPeakKw: peak }),
     riderMRequired: modality === 'btm_vs' && peak > 0 && batteryKw > 1.15 * peak,
     adjustments: s.adjustments, supply: s.supply,
     programs: vs ? electionPrograms(s) : s.programs,
     valueStack: vs ? { ...s.valueStack, network: s.programs.network } : null,
   };
 }
-// The building's bill today: its SC 8 rate, no battery, no exports. The load
-// estimate from bills and the baseline bill use it.
+// The building's bill today: its SC 8 or SC 9 rate (standby if it is on
+// Rate IV or V already), no battery, no exports. The load estimate from bills
+// and the baseline bill use it.
 function baseConfig() {
   const cfg = stackConfig();
-  return { ...cfg, modality: 'btm', account: { sc: 8, rateNo: +state.rateNo, voltage: state.voltage, standby: false }, riderMRequired: false, programs: {}, valueStack: null };
+  return { ...cfg, modality: 'btm', account: { sc: cfg.serviceClass, rateNo: +state.rateNo, voltage: state.voltage, standby: +state.rateNo >= 4 }, riderMRequired: false, programs: {}, valueStack: null };
 }
 function cachedStack(cache, cfg) {
   const key = JSON.stringify(cfg);
@@ -239,6 +240,7 @@ function bindInputs(root) {
       if (prog && v) for (const x of PROGRAM_EXCLUDES[prog[1]] || []) state.programs.enabled[x] = false;
       if (input.dataset.path === 'region') state.zone = v === 'nyc' ? 'J' : (state.zone === 'J' ? 'H' : state.zone);
       if (input.dataset.path === 'modality') state.step = 0;
+      if (input.dataset.path === 'serviceClass' && !RATES_OF[v].includes(+state.rateNo)) state.rateNo = 1;
       if (input.dataset.path.startsWith('valueStack.alt3.hours')) state.valueStack.alt3.hours = state.valueStack.alt3.hours.map(Number);
       // Rate II customers are on Rider M hourly pricing by default.
       if (input.dataset.path === 'rateNo' && v === 2 && state.supply.mode === 'coned_msc') state.supply.mode = 'coned_mhp';
@@ -273,15 +275,15 @@ function select(path, value, options, cast) {
 
 // ---------------------------------------------------------------- step 1: modality
 const MODALITY_BLURB = {
-  btm: 'The building\'s own battery on its SC 8 account. It cuts the building\'s demand and energy bill and can earn Con Edison demand-response payments, but never sends power back to the grid.',
+  btm: 'The building\'s own battery on its SC 8 or SC 9 account. It cuts the building\'s demand and energy bill and can earn Con Edison demand-response payments, but never sends power back to the grid.',
   btm_vs: 'The same battery, also exporting to the grid under the Value Stack (Rider R A.9(d) with SC 11 buy-back service). Exports earn energy, capacity and demand-reduction credits; the building keeps its bill savings.',
   ftm: 'A stand-alone battery with its own Con Edison account and no load of its own, charging from and exporting to the grid under the Value Stack.',
 };
 // What each modality needs: the comparison shown on the first step.
 const REQUIREMENTS = [
   ['Account and tariff',
-    'The building stays on SC 8 (Rate I, II or III). No Rider R, SC 11 or standby service.',
-    'The building stays on SC 8 and adds Rider R A.9(d) and SC 11. Standard rates stay if the battery is 1 MW or less or within 15% of the building\'s peak; otherwise SC 8 standby (Rate IV / V). Rider M hourly supply when the battery exceeds 115% of the building\'s load.',
+    'The building stays on its SC 8 or SC 9 rate. No Rider R or SC 11, and the battery does not move it to standby.',
+    'The building stays on its SC 8 or SC 9 rate and adds Rider R A.9(d) and SC 11. Standard rates stay if the battery is 1 MW or less or within 15% of the building\'s peak; otherwise standby (Rate IV / V of the same class). Rider M hourly supply when the battery exceeds 115% of the building\'s load.',
     'Its own account: SC 2 up to 10 kW, SC 9 standard rates up to 1 MW, SC 9 standby (Rate IV / V) above. Rider R A.9(d) and SC 11; Rider M hourly supply (or an ESCO). Up to 5 MW.'],
   ['Exports',
     'None: a non-export relay or controls keep the meter importing.',
@@ -308,7 +310,7 @@ const REQUIREMENTS = [
     'The same FDNY and DOB requirements. NYSERDA Retail Storage Incentive for systems up to 5 MW.',
     'The same; large outdoor systems need both FDNY and DOB review. NYSERDA Retail Storage Incentive (up to 5 MW, front of the meter on the distribution system included).'],
   ['Not available',
-    'Net metering: an SC 8 building with storage cannot take Phase One net metering (only small SC 1 / SC 2 customers can); solar plus storage there goes on the Value Stack.',
+    'Net metering: an SC 8 or SC 9 building with storage cannot take Phase One net metering (only small SC 1 / SC 2 customers can); solar plus storage there goes on the Value Stack.',
     'The environmental component, Market Transition Credit and Community Credit (storage is not an eligible generator).',
     'The same. The Wholesale Value Stack (energy and capacity sold to NYISO directly, DRV and LSRV kept) is an alternative this tool does not model.'],
 ];
@@ -333,6 +335,31 @@ async function stepModality() {
 
 // ---------------------------------------------------------------- step 2: rate (site, for a stand-alone battery)
 const SC_NAMES = { 2: 'SC 2 (General - Small)', 8: 'SC 8 (Multiple Dwellings, Redistribution)', 9: 'SC 9 (General - Large)' };
+// The rates a building can be on, and what each one is.
+const RATES_OF = { 8: [1, 2, 3], 9: [1, 2, 3, 4, 5] };
+const SC_BLURB = {
+  8: 'A multiple dwelling that buys at a master meter and redistributes electricity to its residents.',
+  9: 'Commercial and other large accounts not on SC 8, above SC 2\'s 10 kW.',
+};
+const RATE_TEXT = {
+  1: 'Standard service: one all-hours demand charge per month, summer and other-month prices.',
+  2: 'Mandatory time-of-day above 1,500 kW: weekday 8-18 and 8-22 demand windows plus an all-hours charge. Supply defaults to Rider M hourly pricing.',
+  3: 'Voluntary time-of-day for smaller customers: the Rate II windows at Rate III prices.',
+  4: 'Standby service (General Rule 20) for a building already on standby, for example with on-site generation: a contract demand billed every month, daily as-used demand, Rider M hourly supply.',
+  5: 'Standby, as Rate IV, for a contract demand above 1,500 kW.',
+};
+// Whether the building's peak fits the rate it is on.
+function rateFitFlags(peakKw) {
+  const r = +state.rateNo, flags = [];
+  if (!(peakKw > 0)) return flags;
+  if (r <= 3 && r !== 2 && peakKw > LIMITS.rateVKw) flags.push(`Peak above ${fmtN(LIMITS.rateVKw)} kW: Con Edison bills such customers under Rate II (mandatory time-of-day).`);
+  if (r === 2 && peakKw < 900) flags.push('Peak below 900 kW for a year moves a Rate II customer back to Rate I.');
+  if (r === 4 && peakKw > LIMITS.rateVKw) flags.push(`Peak above ${fmtN(LIMITS.rateVKw)} kW: a contract demand that size is billed under Rate V.`);
+  if (r === 5 && peakKw <= LIMITS.rateVKw) flags.push(`Peak within ${fmtN(LIMITS.rateVKw)} kW: a contract demand that size is billed under Rate IV.`);
+  return flags;
+}
+const MAX_RATE_NOTE = 'SC 9 Rate I carries a maximum-rate provision for some customers; it is not modelled here.';
+
 function accountLabel(a) { return `SC ${a.sc} Rate ${ROMAN[a.rateNo]}${a.voltage ? ' ' + a.voltage.toUpperCase() : ''}${a.standby ? ' (standby)' : ''}`; }
 
 function rateCard(stack) {
@@ -357,7 +384,7 @@ function rateCard(stack) {
 async function stepRate() {
   const st = data.statements, k = st.delivery_adjustments_usd_per_kwh;
   const stack = getStack();
-  const ftm = state.modality === 'ftm', acct = stack.account, bc = st.by_class[`sc${acct.sc}`];
+  const ftm = state.modality === 'ftm', acct = stack.account, bc = st.by_class[`sc${acct.sc}`], sc = +state.serviceClass || 8;
   const kwhRows = [['NYSERDA SBC surcharge', k.sbc_total_nyserda.value, k.sbc_total_nyserda.statement.effective], ['Monthly Adjustment Clause (MAC)', k.mac.value, k.mac.statement.effective], ['MAC adjustment factor', k.mac_adjustment_factor.value, k.mac_adjustment_factor.statement.effective],
     [`Revenue decoupling (RDM), SC ${acct.sc}`, bc.kwh.rdm, k.rdm_sc8.statement.effective], ...(acct.standby ? [] : [[`Delivery revenue surcharge (SDR), SC ${acct.sc}`, bc.kwh.sdr, k.sdr_sc8_rates_i_ii_iii.statement.effective]]),
     ...(bc.kwh.sbc_company_ee ? [['Company-administered EE / BE charge', bc.kwh.sbc_company_ee, k.sbc_total_nyserda.statement.effective]] : [])];
@@ -367,7 +394,7 @@ async function stepRate() {
       ${field('Service area', select('region', state.region, [['nyc', 'New York City (NYISO zone J)'], ['westchester', 'Westchester (zone H / I)']]), 'Sets the supply capacity charge, LBMP zone, Alternative 3 rate and CSRP rate group.')}
       ${state.region === 'westchester' ? field('NYISO zone', select('zone', state.zone, [['H', 'H (Millwood)'], ['I', 'I (Dunwoodie)']])) : ''}
       ${field('Billing demand interval', select('demandIntervalMin', state.demandIntervalMin, [['15', '15-minute demand (Con Edison default)'], ['30', '30-minute integrated demand']], 'int'), 'The determinant the demand charges bill on.')}
-      ${field('Taxes and surcharges on the bill', numInput('taxPct', state.taxPct, { step: 0.1, min: 0, max: 20, unit: '%' }), ftm ? 'Applied to the charging account\'s delivery and supply; Value Stack credits are not taxed here. Illustrative default.' : 'Applied to delivery and supply. Residential redistribution is sales-tax exempt; GRT-type surcharges are a few percent. Illustrative default.')}`;
+      ${field('Taxes and surcharges on the bill', numInput('taxPct', state.taxPct, { step: 0.1, min: 0, max: 20, unit: '%' }), ftm ? 'Applied to the charging account\'s delivery and supply; Value Stack credits are not taxed here. Illustrative default.' : +state.serviceClass === 9 ? 'Applied to delivery and supply. GRT-type surcharges are a few percent; a commercial SC 9 account generally also pays state and local sales tax (about 8.875% in NYC), while a residential building may be exempt. Illustrative default: add the sales tax if it applies.' : 'Applied to delivery and supply. Residential redistribution is sales-tax exempt; GRT-type surcharges are a few percent. Illustrative default.')}`;
   const choose = ftm ? `
     <fieldset><legend>Charging account</legend>
       <p class="note">The battery's own account follows its power rating (set on the Battery step, ${fmtN(state.battery.kw)} kW now): SC 2 up to ${LIMITS.sc2Kw} kW, SC 9 on standard rates up to ${fmtN(LIMITS.designatedKw)} kW (storage is a Designated Technology, General Rule 20.3.2(b)), SC 9 standby above (Rate V above ${fmtN(LIMITS.rateVKw)} kW of contract demand).</p>
@@ -376,11 +403,19 @@ async function stepRate() {
       </div>
       <p class="ok">Account now: <b>${accountLabel(acct)}</b>. ${esc(acct.reason)}</p>
     </fieldset>` : `
-    <fieldset><legend>SC 8 rate</legend>
+    <fieldset><legend>Service class</legend>
       <div class="choices">
-        ${[1, 2, 3].map((n) => `<label class="choice"><input type="radio" name="rateNo" data-path="rateNo" data-cast="int" value="${n}" ${state.rateNo === n ? 'checked' : ''}><b>Rate ${roman[n]}</b><small>${n === 1 ? 'Standard service: one all-hours demand charge per month, summer and other-month prices.' : n === 2 ? 'Mandatory time-of-day above 1,500 kW: weekday 8-18 and 8-22 demand windows plus an all-hours charge (low tension). Supply defaults to Rider M hourly pricing.' : 'Voluntary time-of-day for smaller customers: the Rate II windows at Rate III prices.'}</small></label>`).join('')}
+        ${[8, 9].map((n) => `<label class="choice"><input type="radio" name="serviceClass" data-path="serviceClass" data-cast="int" value="${n}" ${sc === n ? 'checked' : ''}><b>${SC_NAMES[n]}</b><small>${SC_BLURB[n]}</small></label>`).join('')}
       </div>
-      ${state.modality === 'btm_vs' ? `<p class="${acct.standby ? 'flag' : 'ok'}">With the battery: <b>${accountLabel(acct)}</b>. ${esc(acct.reason)}${acct.standby ? ' The baseline stays the building\'s current SC 8 bill.' : ''}</p>` : ''}
+    </fieldset>
+    <fieldset><legend>SC ${sc} rate</legend>
+      <div class="choices">
+        ${RATES_OF[sc].map((n) => `<label class="choice"><input type="radio" name="rateNo" data-path="rateNo" data-cast="int" value="${n}" ${+state.rateNo === n ? 'checked' : ''}><b>Rate ${roman[n]}</b><small>${RATE_TEXT[n]}</small></label>`).join('')}
+      </div>
+      ${rateFitFlags(buildingPeak()).map((f) => `<p class="flag">${f}</p>`).join('')}
+      ${sc === 9 && +state.rateNo === 1 ? `<p class="note">${MAX_RATE_NOTE}</p>` : ''}
+      ${state.modality === 'btm_vs' && (acct.standby || acct.reason) ? `<p class="${acct.standby ? 'flag' : 'ok'}">With the battery: <b>${accountLabel(acct)}</b>. ${esc(acct.reason)}${acct.standby && +state.rateNo <= 3 ? ` The baseline stays the building's current SC ${sc} bill.` : ''}</p>` : ''}
+      ${state.modality === 'btm' && acct.standby ? `<p class="ok">${esc(acct.reason)}</p>` : ''}
     </fieldset>`;
   return `
     <h2>${ftm ? 'Site and charging account' : 'Delivery rate'}</h2>
@@ -411,14 +446,16 @@ async function stepSupply() {
   const vs = !!stack.valueStack, mfcDefault = st.by_class[`sc${stack.account.sc}`].mfc;
   const capBasis = vs && sup.mode === 'coned_mhp' ? 'on the import in the likely NYISO peak hours (the ICAP tag)' : 'on the monthly max';
   const cap = st.msc_capacity_usd_per_kw_month[state.region];
+  const capMsc = (cap[`sc${stack.account.sc}`] || {})[`rate${stack.account.rateNo}`] ?? '';
   const adjRow = st.msc_adjustment_factors_usd_per_kwh;
   const monthlyAvg = (() => { const idx = stack.idx; const s = new Array(12).fill(0), n = new Array(12).fill(0); for (let t = 0; t < idx.T; t++) { s[idx.month[t] - 1] += sup.energyRate[t]; n[idx.month[t] - 1]++; } return s.map((v, i) => v / n[i]); })();
   const fields = {
     coned_msc: `<div class="grid2">
-        ${field('MSC capacity charge', numInput('supply.capacityRate', S.capacityRate, { step: 0.01, unit: '$/kW-mo', nullable: true, placeholder: cap[`rate${state.rateNo}`] }), `Statement value for Rate ${roman[state.rateNo]}, ${state.region === 'nyc' ? 'NYC' : 'Westchester'}: ${cap[`rate${state.rateNo}`]} $/kW-month (one monthly statement; summer months run higher). Blank = statement value.`)}
+        ${field('MSC capacity charge', numInput('supply.capacityRate', S.capacityRate, { step: 0.01, unit: '$/kW-mo', nullable: true, placeholder: capMsc }), `Statement value for SC ${stack.account.sc} Rate ${roman[stack.account.rateNo]}, ${state.region === 'nyc' ? 'NYC' : 'Westchester'}: ${capMsc} $/kW-month (one monthly statement; summer months run higher). Blank = statement value.`)}
         ${field('Merchant function charge', numInput('supply.mfc', S.mfc, { step: 0.000001, unit: '$/kWh', nullable: true, placeholder: mfcDefault }), 'SCs 5, 6, 8, 9, 12, 13 total MFC.')}
         ${field('MSC adjustment factors', numInput('supply.reconciliation', S.reconciliation, { step: 0.000001, unit: '$/kWh', nullable: true, placeholder: adjRow.reconciliation_all_other_nonresidential[state.region] }), `Month-specific reconciliation; the current statement prints ${adjRow.reconciliation_all_other_nonresidential[state.region]} $/kWh for non-residential "all other" in ${state.region === 'nyc' ? 'NYC' : 'Westchester'}. Blank = statement value.`)}
-      </div>`,
+      </div>
+      <p class="note">Rider M makes hourly pricing mandatory above a size it sets; this tool does not check that. If the account is on Rider M, choose hourly pricing.</p>`,
     coned_mhp: `<div class="grid2">
         ${field('Rider M capacity (ICAP tag)', numInput('supply.capacityRate', S.capacityRate, { step: 0.01, unit: '$/kW-mo', nullable: true, placeholder: cap.rider_m_icap_tag }), vs ? `Statement value ${cap.rider_m_icap_tag} $/kW-month, billed every month on the most the account imports in the likely NYISO peak hours (the Alternative 3 commitment hours on the Value Stack step), which is how the tag is set.` : `Statement value ${cap.rider_m_icap_tag} $/kW-month, applied to each month's maximum demand (simplification of the tag).`)}
         ${field('Merchant function charge', numInput('supply.mfc', S.mfc, { step: 0.000001, unit: '$/kWh', nullable: true, placeholder: mfcDefault }))}
@@ -687,8 +724,7 @@ async function afterLoadStep() {
         <div><div id="chartMonthlyPeak"></div></div>
       </div>
       ${load.meta && load.meta.belowFixed && load.meta.belowFixed.some(Boolean) ? `<p class="flag">${load.meta.belowFixed.map((b, m) => (b ? MONTH_NAMES[m] : null)).filter(Boolean).join(', ')}: the bill is below that month's fixed charges, so the month is modelled with no load.</p>` : ''}
-      ${state.rateNo !== 2 && s.peakKw > 1500 ? '<p class="flag">Peak above 1,500 kW: Con Edison bills such customers under Rate II (mandatory time-of-day).</p>' : ''}
-      ${state.rateNo === 2 && s.peakKw < 900 ? '<p class="flag">Peak below 900 kW for a year moves a Rate II customer back to Rate I.</p>' : ''}
+      ${state.modality === 'ftm' ? '' : rateFitFlags(s.peakKw).map((f) => `<p class="flag">${f}</p>`).join('')}
       <div class="inline" style="margin-top:0.6rem"><button type="button" class="btn small" id="dlProfile">Download profile as CSV</button><span class="note">timestamp,kw on the 2027 model calendar</span></div>`;
     barChart($('#chartMonthlyKwh'), { labels: MONTH_NAMES, series: [{ name: 'Energy, MWh', values: mKwh.map((v) => v / 1000), color: 'var(--s1)' }], yFormat: (v) => v.toFixed(0), height: 180, yLabel: 'monthly energy MWh' });
     barChart($('#chartMonthlyPeak'), { labels: MONTH_NAMES, series: [{ name: 'Peak, kW', values: mPk, color: 'var(--s2)' }], yFormat: (v) => v.toFixed(0), height: 180, yLabel: 'monthly peak kW' });
@@ -896,11 +932,12 @@ async function stepResults() {
   const weeks = weekOptions(R.load.kw);
   const sup = R.stack.supply;
   const assumptions = [
-    `Rate ${roman[state.rateNo]}, ${state.voltage.toUpperCase()}, ${state.region === 'nyc' ? 'New York City' : 'Westchester'} (zone ${R.stack.supply.zone})${edition.rateProvenanceClause(R.stack.tariff)}; ${R.stack.demandIntervalMin}-minute billing demand.`,
+    `SC ${R.stack.account.sc} Rate ${roman[state.rateNo]}, ${state.voltage.toUpperCase()}, ${state.region === 'nyc' ? 'New York City' : 'Westchester'} (zone ${R.stack.supply.zone})${edition.rateProvenanceClause(R.stack.tariff)}; ${R.stack.demandIntervalMin}-minute billing demand.`,
     `Delivery $/kWh adjustments ${R.stack.kwhAdj.toFixed(6)} $/kWh; statements in force on ${esc(data.statements.in_force_on)}.`,
     esc(sup.description) + '.',
     ...sup.warnings.map(esc),
-    `Non-exporting battery: imports never go negative, no Rider R / Value Stack, no standby (Rate IV / V) rates.`,
+    R.stack.account.standby ? `Non-exporting battery: imports never go negative, no Rider R / Value Stack; the building is on standby (Rate ${roman[state.rateNo]}) with and without it.` : `Non-exporting battery: imports never go negative, no Rider R / Value Stack, no standby (Rate IV / V) rates.`,
+    ...(R.stack.account.sc === 9 && R.stack.account.rateNo === 1 ? [MAX_RATE_NOTE] : []),
     `Perfect-foresight dispatch over the model year (2027 calendar, DST ignored); cyclic state of charge; LP relaxation with a post-solve netting of simultaneous charge and discharge.`,
     `Cycle budget: ${fmtN(S.throughputKwh)} kWh discharged = ${S.cycles.toFixed(0)} equivalent full cycles${S.cycleLimit ? ` of the ${S.cycleLimit} allowed` : ' (no cap)'}.` + cycleNote(R),
     ...(R.stack.programs.notes || []).map(esc),
@@ -967,7 +1004,8 @@ function resultsValueStack(R) {
   const sup = R.stack.supply;
   const assumptions = [
     `${ftm ? 'Charging account' : 'Building account with the battery'}: ${accountLabel(R.stack.account)}, ${state.region === 'nyc' ? 'New York City' : 'Westchester'} (zone ${sup.zone})${edition.rateProvenanceClause(R.stack.tariff)}; ${R.stack.demandIntervalMin}-minute billing demand. ${esc(R.stack.account.reason)}`,
-    ...(R.stack.account.standby && !ftm ? ['The baseline is the building\'s current SC 8 bill on standard rates; with the battery it moves to standby.'] : []),
+    ...(R.stack.account.standby && !ftm ? [+state.rateNo >= 4 ? `The building is on SC ${R.stack.account.sc} standby (Rate ${roman[state.rateNo]}) with and without the battery.` : `The baseline is the building's current SC ${R.stack.account.sc} bill on standard rates; with the battery it moves to standby.`] : []),
+    ...(R.stack.account.sc === 9 && R.stack.account.rateNo === 1 ? [MAX_RATE_NOTE] : []),
     `Delivery $/kWh adjustments ${R.stack.kwhAdj.toFixed(6)} $/kWh; statements in force on ${esc(data.statements.in_force_on)}.`,
     esc(sup.description) + '.', ...sup.warnings.map(esc), ...R.stack.notes.map(esc),
     `Value Stack (Rider R A.9(d) with SC 11): credits on each hour's net injection; energy at day-ahead LBMP x ${lf} (General Rule 25.1 losses); Alternative 3 at the ${data.valueStack.statements.length} monthly statements x ${lf}; the DRV and LSRV fixed for 10 years; no environmental component, MTC or Community Credit for storage. The 25-year Value Stack term and escalation are not modelled.`,
@@ -1373,7 +1411,7 @@ async function renderRail() {
   rail.innerHTML = `
     <div class="card"><h4>Scenario</h4><dl>
       <dt>Modality</dt><dd>${esc(MODALITIES[state.modality])}</dd>
-      <dt>${ftm ? 'Account' : 'Rate'}</dt><dd>${stack ? accountLabel(stack.account) : `SC 8 Rate ${roman[state.rateNo]} ${state.voltage.toUpperCase()}`}, ${state.region === 'nyc' ? 'NYC' : 'Westchester'} (zone ${state.zone})</dd>
+      <dt>${ftm ? 'Account' : 'Rate'}</dt><dd>${stack ? accountLabel(stack.account) : `SC ${state.serviceClass || 8} Rate ${roman[state.rateNo]} ${state.voltage.toUpperCase()}`}, ${state.region === 'nyc' ? 'NYC' : 'Westchester'} (zone ${state.zone})</dd>
       <dt>Supply</dt><dd>${stack ? esc(SUPPLY_MODES[stack.supply.mode]) : esc(SUPPLY_MODES[state.supply.mode])}${stack ? `, ${(stack.supply.avgEnergyRate * 100).toFixed(1)}¢/kWh avg, ${fmt$(stack.supply.capacityRate, 2)}/kW-mo` : ''}</dd>
       ${exportsOn(state.modality) ? `<dt>Value Stack</dt><dd>${{ value_stack: 'DRV kept', rider_t: 'Rider T instead of DRV', rider_ac: 'Rider AC instead of DRV' }[state.valueStack.election]}${state.programs.network ? `, ${esc(state.programs.network)}` : ''}</dd>` : ''}
       <dt>Programs</dt><dd>${enrolled.join(', ') || 'none'}${stack && stack.programs.network && enrolled.length ? ` at ${esc(stack.programs.network.name)}, ${fmtN(state.programs.pledgeKw)} kW` : ''}</dd>

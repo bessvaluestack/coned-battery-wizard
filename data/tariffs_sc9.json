@@ -193,6 +193,297 @@
   ],
   "source_file": "config/tariffs/corpus_ced_sc9_rate1_lt.yaml"
  },
+ "corpus_ced_sc9_rate2_ht": {
+  "id": "corpus_ced_sc9_rate2_ht",
+  "name": "Con Edison Rate II - General - Large - Time-of-Day (Mandatory) (high tension)",
+  "service_class": "SC 9",
+  "applicability": "Mandatory: (1) To Customers who were billed under Rate II as of February 20, 2012; (2) To any Customer, other than Customers taking service under Rider J, whose monthly maximum demand exceeds 1,500 kW in any annual period ending September 30; (3) To any new Customer, other than a new Customer taking service under Rider J, whose monthly maximum demand in the Company's estimate will exceed 1,500 kW during the first year of service; (4) To successors of Customers referred to in (1), (2) and (3) above; and (5) To any Customer taking service under Rider J, whose monthly maximum demand exceeds 900 kW in any annual period ending September 30, or in the case of a new Customer taking service under Rider J, whose monthly maximum demand in the Company's estimate will exceed 900 kW during the first year of service; provided the Customer is not subject to billing under Rate IV or Rate V. A Customer with multiple meters whose demand meter registrations are added together for billing purposes pursuant to the provisions of this Rate Schedule shall be billed under Rate II if the Customer qualifies for Rate II pursuant to one or more of the criteria stated above and if at least one of the meters registers 500 kW or more in any month in any annual period ending September 30. Customers subject to Rate II pursuant to (2) above shall commence billing under Rate II when the Customer's entire usage is subsequent to December 31 of the annual period ending September 30 in which the Customer becomes subject to Rate II. A Rate II Customer shall be transferred to and billed under Rate I in the first billing period that commences after the Customer's monthly maximum demand does not exceed 900 kW for 12 consecutive months unless the Customer elects to be billed under Rate III.",
+  "rate_basis": "delivery_only",
+  "fixed_charge_per_month": 510.0,
+  "energy": {
+   "units": "usd_per_kwh",
+   "seasons": [
+    {
+     "name": "all_year",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "tou": [
+      {
+       "name": "all_hours",
+       "days": "all",
+       "rate": 0.0079,
+       "lineage": [
+        "ny.ced.psc10.sc9.rate2.energy.kwh.all"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "demand": {
+   "units": "usd_per_kw_month",
+   "charges": [
+    {
+     "name": "summer_weekdays_h8_18",
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      18
+     ],
+     "rate": 11.33,
+     "determinant": "tod_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate2.demand.tod_demand_kw.m6_7_8_9.weekdays.h8_18"
+     ]
+    },
+    {
+     "name": "summer_weekdays_h8_22",
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "rate": 22.82,
+     "determinant": "tod_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate2.demand.tod_demand_kw.m6_7_8_9.weekdays.h8_22"
+     ]
+    },
+    {
+     "name": "other_weekdays_h8_22",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      10,
+      11,
+      12
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "rate": 19.41,
+     "determinant": "tod_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate2.demand.tod_demand_kw.m1_2_3_4_5_10_11_12.weekdays.h8_22"
+     ]
+    }
+   ]
+  },
+  "book_vintage": "ny.ced.psc10@2026-08-01",
+  "conversion_notes": [
+   "2 row(s) for other voltage levels excluded from this variant"
+  ],
+  "unmodelled": [
+   {
+    "what": "reactive power charge",
+    "reason": "Detail defined in General Rule 10.11, not included in this bundle.",
+    "cell_ids": [
+     "ny.ced.psc10.sc9.rate2.reactive"
+    ]
+   }
+  ],
+  "lineage": [
+   "ny.ced.psc10.sc9.rate2.customer_charge",
+   "ny.ced.psc10.sc9.rate2.demand.tod_demand_kw.m1_2_3_4_5_10_11_12.weekdays.h8_22",
+   "ny.ced.psc10.sc9.rate2.demand.tod_demand_kw.m6_7_8_9.weekdays.h8_18",
+   "ny.ced.psc10.sc9.rate2.demand.tod_demand_kw.m6_7_8_9.weekdays.h8_22",
+   "ny.ced.psc10.sc9.rate2.energy.kwh.all"
+  ],
+  "source_file": "config/tariffs/corpus_ced_sc9_rate2_ht.yaml"
+ },
+ "corpus_ced_sc9_rate2_lt": {
+  "id": "corpus_ced_sc9_rate2_lt",
+  "name": "Con Edison Rate II - General - Large - Time-of-Day (Mandatory) (low tension)",
+  "service_class": "SC 9",
+  "applicability": "Mandatory: (1) To Customers who were billed under Rate II as of February 20, 2012; (2) To any Customer, other than Customers taking service under Rider J, whose monthly maximum demand exceeds 1,500 kW in any annual period ending September 30; (3) To any new Customer, other than a new Customer taking service under Rider J, whose monthly maximum demand in the Company's estimate will exceed 1,500 kW during the first year of service; (4) To successors of Customers referred to in (1), (2) and (3) above; and (5) To any Customer taking service under Rider J, whose monthly maximum demand exceeds 900 kW in any annual period ending September 30, or in the case of a new Customer taking service under Rider J, whose monthly maximum demand in the Company's estimate will exceed 900 kW during the first year of service; provided the Customer is not subject to billing under Rate IV or Rate V. A Customer with multiple meters whose demand meter registrations are added together for billing purposes pursuant to the provisions of this Rate Schedule shall be billed under Rate II if the Customer qualifies for Rate II pursuant to one or more of the criteria stated above and if at least one of the meters registers 500 kW or more in any month in any annual period ending September 30. Customers subject to Rate II pursuant to (2) above shall commence billing under Rate II when the Customer's entire usage is subsequent to December 31 of the annual period ending September 30 in which the Customer becomes subject to Rate II. A Rate II Customer shall be transferred to and billed under Rate I in the first billing period that commences after the Customer's monthly maximum demand does not exceed 900 kW for 12 consecutive months unless the Customer elects to be billed under Rate III.",
+  "rate_basis": "delivery_only",
+  "fixed_charge_per_month": 510.0,
+  "energy": {
+   "units": "usd_per_kwh",
+   "seasons": [
+    {
+     "name": "all_year",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+     ],
+     "tou": [
+      {
+       "name": "all_hours",
+       "days": "all",
+       "rate": 0.0079,
+       "lineage": [
+        "ny.ced.psc10.sc9.rate2.energy.kwh.all"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "demand": {
+   "units": "usd_per_kw_month",
+   "charges": [
+    {
+     "name": "summer_weekdays_h8_18",
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      18
+     ],
+     "rate": 11.33,
+     "determinant": "tod_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate2.demand.tod_demand_kw.m6_7_8_9.weekdays.h8_18"
+     ]
+    },
+    {
+     "name": "summer_weekdays_h8_22",
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "rate": 22.82,
+     "determinant": "tod_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate2.demand.tod_demand_kw.m6_7_8_9.weekdays.h8_22"
+     ]
+    },
+    {
+     "name": "summer_all_all_hours",
+     "months": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "days": "all",
+     "rate": 20.61,
+     "determinant": "monthly_max_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate2.demand.tod_demand_kw.m6_7_8_9.all.h_all"
+     ]
+    },
+    {
+     "name": "other_weekdays_h8_22",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      10,
+      11,
+      12
+     ],
+     "days": "weekdays",
+     "hours": [
+      8,
+      22
+     ],
+     "rate": 19.41,
+     "determinant": "tod_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate2.demand.tod_demand_kw.m1_2_3_4_5_10_11_12.weekdays.h8_22"
+     ]
+    },
+    {
+     "name": "other_all_all_hours",
+     "months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      10,
+      11,
+      12
+     ],
+     "days": "all",
+     "rate": 5.85,
+     "determinant": "monthly_max_demand_kw",
+     "lineage": [
+      "ny.ced.psc10.sc9.rate2.demand.tod_demand_kw.m1_2_3_4_5_10_11_12.all.h_all"
+     ]
+    }
+   ]
+  },
+  "book_vintage": "ny.ced.psc10@2026-08-01",
+  "conversion_notes": [
+   "demand row ny.ced.psc10.sc9.rate2.demand.tod_demand_kw.m6_7_8_9.all.h_all: tod_demand_kw with no hour window compiled as monthly_max_demand_kw",
+   "demand row ny.ced.psc10.sc9.rate2.demand.tod_demand_kw.m1_2_3_4_5_10_11_12.all.h_all: tod_demand_kw with no hour window compiled as monthly_max_demand_kw"
+  ],
+  "unmodelled": [
+   {
+    "what": "reactive power charge",
+    "reason": "Detail defined in General Rule 10.11, not included in this bundle.",
+    "cell_ids": [
+     "ny.ced.psc10.sc9.rate2.reactive"
+    ]
+   }
+  ],
+  "lineage": [
+   "ny.ced.psc10.sc9.rate2.customer_charge",
+   "ny.ced.psc10.sc9.rate2.demand.tod_demand_kw.m1_2_3_4_5_10_11_12.all.h_all",
+   "ny.ced.psc10.sc9.rate2.demand.tod_demand_kw.m1_2_3_4_5_10_11_12.weekdays.h8_22",
+   "ny.ced.psc10.sc9.rate2.demand.tod_demand_kw.m6_7_8_9.all.h_all",
+   "ny.ced.psc10.sc9.rate2.demand.tod_demand_kw.m6_7_8_9.weekdays.h8_18",
+   "ny.ced.psc10.sc9.rate2.demand.tod_demand_kw.m6_7_8_9.weekdays.h8_22",
+   "ny.ced.psc10.sc9.rate2.energy.kwh.all"
+  ],
+  "source_file": "config/tariffs/corpus_ced_sc9_rate2_lt.yaml"
+ },
  "corpus_ced_sc9_rate3_ht": {
   "id": "corpus_ced_sc9_rate3_ht",
   "name": "Con Edison Rate III - General - Large - Voluntary Time-of-Day (high tension)",

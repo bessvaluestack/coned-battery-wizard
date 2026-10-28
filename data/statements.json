@@ -93,15 +93,29 @@
  "msc_capacity_usd_per_kw_month": {
   "note": "Statement of Market Supply Charge - Capacity (one monthly statement, not a 12-month profile); billed on the monthly maximum demand of full-service customers",
   "nyc": {
-   "rate1": 22.87,
-   "rate2": 25.81,
-   "rate3": 23.26,
+   "sc8": {
+    "rate1": 22.87,
+    "rate2": 25.81,
+    "rate3": 23.26
+   },
+   "sc9": {
+    "rate1": 14.32,
+    "rate2": 19.26,
+    "rate3": 14.63
+   },
    "rider_m_icap_tag": 12.45
   },
   "westchester": {
-   "rate1": 8.35,
-   "rate2": 9.42,
-   "rate3": 8.49,
+   "sc8": {
+    "rate1": 8.35,
+    "rate2": 9.42,
+    "rate3": 8.49
+   },
+   "sc9": {
+    "rate1": 5.23,
+    "rate2": 7.03,
+    "rate3": 5.34
+   },
    "rider_m_icap_tag": 5.4
   }
  },

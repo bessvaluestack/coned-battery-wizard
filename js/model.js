@@ -2,7 +2,8 @@
 // + load + battery) into the bill stack, the LP inputs, and the results.
 // Pure functions; the solver runs in the worker (see solve.js).
 //
-// Modalities: 'btm' a behind-the-meter SC 8 battery that never exports;
+// Modalities: 'btm' a behind-the-meter battery on the building's SC 8 or
+// SC 9 account that never exports;
 // 'btm_vs' the same battery also exporting under the Value Stack (Rider R
 // A.9(d) + SC 11); 'ftm' a stand-alone battery with its own account and no
 // load, compensated under the Value Stack.
@@ -45,11 +46,13 @@ export const ROMAN = { 1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V' };
  * The account a battery's consumption (and the building's, behind the meter)
  * is billed on. Front of the meter the account is the battery's own: SC 2 up
  * to 10 kW, SC 9 up to 1 MW (Rate I, or Rate III if chosen), SC 9 standby
- * above. Behind the meter with exports the building stays on its SC 8 rate
- * unless the battery is above 1 MW and above 15% of the building's peak.
+ * above. Behind the meter the building keeps its SC 8 or SC 9 rate (a
+ * building already on standby, SC 9 Rate IV or V, stays there); with
+ * exports it moves to standby when the battery is above 1 MW and above 15%
+ * of the building's peak.
  * @returns { sc, rateNo, voltage, standby, reason }
  */
-export function chargingAccount({ modality, rateNo, voltage, batteryKw, buildingPeakKw }) {
+export function chargingAccount({ modality, sc = 8, rateNo, voltage, batteryKw, buildingPeakKw }) {
   const kw = +batteryKw || 0;
   if (modality === 'ftm') {
     if (kw <= LIMITS.sc2Kw) return { sc: 2, rateNo: 1, voltage: null, standby: false, reason: `SC 2 Rate I: the battery's ${kw} kW is within SC 2's 10 kW.` };
@@ -60,24 +63,25 @@ export function chargingAccount({ modality, rateNo, voltage, batteryKw, building
     const r = kw > LIMITS.rateVKw ? 5 : 4;
     return { sc: 9, rateNo: r, voltage, standby: true, reason: `SC 9 Rate ${ROMAN[r]} standby: storage above 1 MW is billed under General Rule 20${r === 5 ? ', Rate V above 1,500 kW of contract demand' : ''}.` };
   }
+  if (rateNo >= 4) return { sc, rateNo, voltage, standby: true, reason: `SC ${sc} Rate ${ROMAN[rateNo]} standby: the building is already a standby customer (General Rule 20).` };
   if (modality === 'btm_vs' && kw > LIMITS.designatedKw && !(buildingPeakKw > 0 && kw <= LIMITS.smallShare * buildingPeakKw)) {
     const cd = Math.max(+buildingPeakKw || 0, kw);
     const r = cd > LIMITS.rateVKw ? 5 : 4;
-    return { sc: 8, rateNo: r, voltage, standby: true, reason: `SC 8 Rate ${ROMAN[r]} standby: a battery above 1 MW and above 15% of the building's peak is billed under General Rule 20.` };
+    return { sc, rateNo: r, voltage, standby: true, reason: `SC ${sc} Rate ${ROMAN[r]} standby: a battery above 1 MW and above 15% of the building's peak is billed under General Rule 20.` };
   }
-  return { sc: 8, rateNo, voltage, standby: false, reason: modality === 'btm_vs' ? 'SC 8 standard rates: the battery is within 1 MW or 15% of the building\'s peak (General Rule 20.3).' : '' };
+  return { sc, rateNo, voltage, standby: false, reason: modality === 'btm_vs' ? `SC ${sc} standard rates: the battery is within 1 MW or 15% of the building's peak (General Rule 20.3).` : '' };
 }
 
 /**
  * Build everything that does not depend on the load profile.
- * @param cfg  { rateNo, voltage:'lt'|'ht', region:'nyc'|'westchester', zone, demandIntervalMin,
+ * @param cfg  { serviceClass: 8|9, rateNo, voltage:'lt'|'ht', region:'nyc'|'westchester', zone, demandIntervalMin,
  *               adjustments: { kwh (delivery $/kWh), sbcDemand (bool), extraKwh, extraDemand ($/kW-mo) },
  *               taxPct, supply: {...}, programs: {...} }
  */
 export function buildStack(cfg, data) {
   const idx = buildIndex();
   const modality = cfg.modality || 'btm';
-  const acct = cfg.account || { sc: 8, rateNo: cfg.rateNo, voltage: cfg.voltage, standby: false };
+  const acct = cfg.account || { sc: cfg.serviceClass || 8, rateNo: cfg.rateNo, voltage: cfg.voltage, standby: cfg.rateNo >= 4 };
   const tariff = tariffFor(data.tariffs, acct.rateNo, acct.voltage, acct.sc);
   if (!tariff) throw new Error(`no tariff for SC ${acct.sc} Rate ${acct.rateNo} ${acct.voltage || ''}`);
   const st = data.statements;
@@ -96,6 +100,7 @@ export function buildStack(cfg, data) {
     } else if (acct.rateNo === 1) {
       extraDemand.push({ name: 'SBC surcharge (monthly max)', rate: bc.kw.rate1.monthly_max_demand_kw, group: 'delivery_adjustment_demand', determinant: 'monthly_max_demand_kw' });
     } else {
+      // SC 8 and SC 9 Rates II and III: the same weekday 8-22 window.
       const w = st.delivery_adjustments_usd_per_kw_month.sbc_sc8_rates_ii_iii_tod.window;
       extraDemand.push({ name: 'SBC surcharge (TOD weekdays 8-22)', rate: bc.kw.tod.tod_demand_kw, days: w.days, hours: w.hours, months: w.months, group: 'delivery_adjustment_demand', determinant: 'tod_demand_kw' });
     }
@@ -112,14 +117,14 @@ export function buildStack(cfg, data) {
   // --- supply ---
   // Rider M hourly pricing is mandatory for standby customers and for
   // Value Stack storage above 115% of the on-site load (always, in front of
-  // the meter); the MSC lookup only covers SC 8 Rates I-III.
+  // the meter); otherwise the MSC lookup covers SC 8 and SC 9 Rates I-III.
   const supplyCfg = { ...cfg.supply };
-  const riderM = acct.standby || acct.sc !== 8 || (modality === 'btm_vs' && cfg.riderMRequired);
+  const riderM = acct.standby || modality === 'ftm' || (modality === 'btm_vs' && cfg.riderMRequired);
   if (riderM && supplyCfg.mode === 'coned_msc') {
     supplyCfg.mode = 'coned_mhp';
     notes.push('Con Edison supply is on Rider M hourly pricing: it is mandatory for this account.');
   }
-  const supply = buildSupply({ ...supplyCfg, region: cfg.region, zone: cfg.zone, rateNo: acct.sc === 8 ? acct.rateNo : 1, mfcDefault: bc.mfc, icapTag: !!valueStack }, { ...data, tariff });
+  const supply = buildSupply({ ...supplyCfg, region: cfg.region, zone: cfg.zone, sc: acct.sc, rateNo: acct.rateNo, mfcDefault: bc.mfc, icapTag: !!valueStack }, { ...data, tariff });
   const charges = [...ta.demandCharges];
   if (supply.capacityRate > 0) {
     if (valueStack && supply.mode === 'coned_mhp') {

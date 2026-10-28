@@ -3,7 +3,7 @@
 // sheet, so the financial model can always tell which analysis (and which
 // configuration of it, by the fingerprint) its numbers came from.
 
-export const APP_VERSION = '0.3.0';
+export const APP_VERSION = '0.4.0';
 export const PROJECT_FORMAT = 'coned-battery-wizard/project';
 export const PROJECT_FILE_VERSION = 1;
 

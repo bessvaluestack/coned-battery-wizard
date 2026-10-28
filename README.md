@@ -3,9 +3,9 @@
 A static, browser-only wizard that models a battery in Con Edison territory
 and reports its annual value, in three modalities:
 
-- **Behind the meter, no export**: a large master-metered multifamily
-  building on **Service Classification 8 (Multiple Dwellings,
-  Redistribution)**, bill savings plus Rider T / Rider AC demand response.
+- **Behind the meter, no export**: a large building on **Service
+  Classification 8 (Multiple Dwellings, Redistribution)** or **9 (General -
+  Large)**, bill savings plus Rider T / Rider AC demand response.
 - **Behind the meter, exporting under the Value Stack**: the same building,
   with the battery's net hourly injections credited under Rider R A.9(d)
   with SC 11 buy-back service.
@@ -16,7 +16,7 @@ and reports its annual value, in three modalities:
 No backend: the tariff engine, supply model, program and Value Stack terms
 and the dispatch optimisation (HiGHS compiled to WebAssembly) all run in the
 page, so it deploys to GitHub Pages or as a claude.ai artifact as-is. It
-started as a copy of the SC 8 Battery Wizard, which stays live separately.
+started as a copy of the earlier SC 8 Battery Wizard.
 
 Inputs are compiled from the Con Edison P.S.C. No. 10 tariff corpus by an
 upstream tariff model (the reference engine); `scripts/export_data.py` is the
@@ -30,14 +30,18 @@ the Value Stack modalities pick an election instead of the riders.
 0. **Modality**: the three project types and an outline of what each needs
    (account and tariff, exports, revenue, demand response, interconnection,
    metering, permits and incentives, what is not available).
-1. **Rate** (**Site** for a stand-alone battery): SC 8 Rate I / II / III, or
-   the battery's own account, which follows its power rating: SC 2 up to
-   10 kW, SC 9 Rate I or III on standard rates up to 1 MW (storage is a
-   Designated Technology, General Rule 20.3.2(b)), SC 9 standby Rate IV / V
-   above (Rate V above 1,500 kW of contract demand). Behind the meter with
-   exports the building stays on standard SC 8 unless the battery is above
-   1 MW and above 15% of the building's peak (then SC 8 standby). Low or
-   high tension, NYC or Westchester,
+1. **Rate** (**Site** for a stand-alone battery): the building's service
+   class and rate, SC 8 Rate I / II / III or SC 9 Rate I to V (Rates IV and
+   V for a building already on standby, for example with on-site
+   generation), or the battery's own account, which follows its power
+   rating: SC 2 up to 10 kW, SC 9 Rate I or III on standard rates up to 1 MW
+   (storage is a Designated Technology, General Rule 20.3.2(b)), SC 9
+   standby Rate IV / V above (Rate V above 1,500 kW of contract demand).
+   Behind the meter with exports the building stays on its standard rate
+   unless the battery is above 1 MW and above 15% of the building's peak
+   (then standby in the same class). Flags a rate the building's peak does
+   not fit (Rate II is mandatory above 1,500 kW; Rate IV / V by contract
+   demand). Low or high tension, NYC or Westchester,
    15-minute (default) or 30-minute billing demand, delivery $/kWh
    adjustments (SBC, MAC, RDM, SDR) and the SBC demand surcharge, a
    tax/surcharge percentage.
@@ -280,11 +284,11 @@ Source: GitHub Actions).
 | File | Content | Source (paths in the reference engine's repo) |
 |---|---|---|
 | `tariffs_sc8.json` | SC 8 Rate I/II/III x LT/HT schedules with lineage | `config/tariffs/corpus_ced_sc8_*.yaml`, book `ny.ced.psc10@2026-08-01` (candidate) |
-| `statements_sc8.json` | SBC, MAC, RDM, SDR, MSC capacity, MFC, MSC adjustment factors | `config/supply/ny.ced.psc10.yaml` + `config/tariff_db/.../statements` |
-| `msc_sc8.json` | Observed MSC $/kWh per calendar day (codes 008CNV / 008TOD, zones J/H/I, all / on / off peak), 12 months to 2026-08 | MSC lookup dataset vintage 2026-09-25 |
+| `statements.json` | SBC, MAC, RDM, SDR, MSC capacity (SC 8 and SC 9 Rates I-III), MFC, MSC adjustment factors, and the per-class adjustments (SC 2, 8, 9) | `config/supply/ny.ced.psc10.yaml` + `config/tariff_db/.../statements` |
+| `msc.json` | Observed MSC $/kWh per calendar day (codes 008CNV / 008TOD for SC 8, 009CNV / 009TOD for SC 9, zones J/H/I, all / on / off peak), 12 months to 2026-08 | MSC lookup dataset vintage 2026-09-25 |
 | `lbmp_{J,H,I}.json` | NYISO day-ahead hourly LBMP on the model year | `data/lbmp/<zone>.csv` (2025-07 to 2026-06) |
 | `programs.json` | CSRP / DLRP / Term-DLM / Auto-DLM terms and the 83-network table | `config/programs/ny.ced.psc10.yaml` |
-| `tariffs_sc9.json`, `tariffs_sc2.json` | SC 9 Rate I / III and SC 2 Rate I (compiled), SC 9 standby Rate IV / V (all other customers, from the extracted book); `tariffs_sc8.json` also carries SC 8 Rate IV / V | `config/tariffs/corpus_ced_sc{9,2}_*.yaml`, `config/tariff_db/ny/ced/books/ny.ced.psc10_2026-08-01.json` |
+| `tariffs_sc9.json`, `tariffs_sc2.json` | SC 9 Rate I / II / III and SC 2 Rate I (compiled), SC 9 standby Rate IV / V (all other customers, from the extracted book); `tariffs_sc8.json` also carries SC 8 Rate IV / V | `config/tariffs/corpus_ced_sc{9,2}_*.yaml`, `config/tariff_db/ny/ced/books/ny.ced.psc10_2026-08-01.json` |
 | `value_stack.json` | Loss factor, Alternative 3 by month (statements Nov 2025 to Oct 2026), DRV rate and call window by network, LSRV rate and MW remaining | `config/compensation/ny.ced.psc10.yaml` + `scripts/value_stack_statements.json` (read from Con Edison's published Statements of Value Stack Credits) |
 | `profiles/*.json` | Four synthetic multifamily profiles | `scripts/make_profiles.mjs` (seeded) |
 
@@ -322,6 +326,18 @@ node scripts/make_profiles.mjs
   standby above, up to the 5 MW Value Stack cap.
 - The owner pro-forma covers all three modalities.
 
+## SC 9 decisions (2026-10-28)
+
+- The building's account is SC 8 or SC 9; the load profiles stay the
+  multifamily presets (scale to the bills or upload interval data).
+- SC 9 offers all five rates; Rates IV and V as a starting rate are SC 9
+  only for now.
+- Taxes stay one editable percentage (2.5% default) for both classes; for
+  SC 9 the help text says a commercial account generally also pays sales
+  tax, a residential building may not.
+- Flagged, not modelled: the SC 9 Rate I maximum-rate provision, and the
+  size above which Rider M makes hourly pricing mandatory.
+
 ## Next version (planned)
 
 - Multi-year cash flow in the wizard itself (the pro-forma already applies
@@ -341,6 +357,9 @@ node scripts/make_profiles.mjs
   redistribution is sales-tax exempt.
 - Program baselines are the no-battery meter, not Con Edison's CBL; event
   days are chosen with perfect price foresight.
+- SC 9 Rate I's maximum-rate provision is not modelled, and the Rider M
+  mandatory hourly pricing threshold is not checked: the user picks the
+  supply.
 - No reactive charges, no minimum charges, single year, no escalation, no
   25-year Value Stack term. Degradation is usable energy only, through the
   capacity curve: no power or efficiency fade.

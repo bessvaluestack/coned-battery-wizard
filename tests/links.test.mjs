@@ -9,7 +9,7 @@ import { projectHash, readProjectHash, newProject } from '../js/project.js';
 import { fieldCell } from '../js/wizardsheet.js';
 
 const read = (p) => JSON.parse(readFileSync(new URL('../data/' + p, import.meta.url), 'utf8'));
-const data = { tariffs: read('tariffs_sc8.json'), statements: read('statements_sc8.json'), msc: read('msc_sc8.json'), lbmp: { J: read('lbmp_J.json'), H: read('lbmp_H.json'), I: read('lbmp_I.json') }, programs: read('programs.json') };
+const data = { tariffs: read('tariffs_sc8.json'), statements: read('statements.json'), msc: read('msc.json'), lbmp: { J: read('lbmp_J.json'), H: read('lbmp_H.json'), I: read('lbmp_I.json') }, programs: read('programs.json') };
 const template = readFileSync(new URL('../templates/proforma.xlsx', import.meta.url));
 const cell = (xml, ref) => (xml.match(new RegExp(`<c r="${ref}"[^>]*?(?:/>|>(.*?)</c>)`, 's')) || [])[1] || '';
 const text = (xml, ref) => ((cell(xml, ref).match(/<t[^>]*>([^<]*)<\/t>/) || [])[1] || '').replace(/&amp;/g, '&');

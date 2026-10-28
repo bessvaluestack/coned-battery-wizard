@@ -11,7 +11,7 @@ import { parseIntervalCsv, scaleToBill, scaleToMonthlyBills, stats } from '../js
 
 const read = (p) => JSON.parse(readFileSync(new URL('../data/' + p, import.meta.url), 'utf8'));
 const data = {
-  tariffs: read('tariffs_sc8.json'), statements: read('statements_sc8.json'), msc: read('msc_sc8.json'),
+  tariffs: read('tariffs_sc8.json'), statements: read('statements.json'), msc: read('msc.json'),
   lbmp: { J: read('lbmp_J.json'), H: read('lbmp_H.json'), I: read('lbmp_I.json') }, programs: read('programs.json'),
 };
 

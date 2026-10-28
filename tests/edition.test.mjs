@@ -12,7 +12,7 @@ import { bannedWords, build, stripJsComments } from '../scripts/build.mjs';
 
 const readJson = (dir, p) => JSON.parse(readFileSync(join(dir, 'data', p), 'utf8'));
 const loadData = (dir) => ({
-  tariffs: readJson(dir, 'tariffs_sc8.json'), statements: readJson(dir, 'statements_sc8.json'), msc: readJson(dir, 'msc_sc8.json'),
+  tariffs: readJson(dir, 'tariffs_sc8.json'), statements: readJson(dir, 'statements.json'), msc: readJson(dir, 'msc.json'),
   lbmp: { J: readJson(dir, 'lbmp_J.json'), H: readJson(dir, 'lbmp_H.json'), I: readJson(dir, 'lbmp_I.json') }, programs: readJson(dir, 'programs.json'),
 });
 
