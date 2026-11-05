@@ -5,7 +5,7 @@ The wizard follows Con Edison's filed tariff and published statements, the NY SI
 ## Analysis
 
 - **One year.** The run is Year 1, at the rates and statements in force. Escalation, the 25-year Value Stack term and capital costs are the pro-forma's job; degradation enters through the [capacity curve](battery.md#the-capacity-curve).
-- **Perfect foresight.** The dispatch knows the whole year's load and prices in advance, and demand-response event days are chosen with that knowledge. A real controller earns less.
+- **Perfect foresight.** The dispatch knows the whole year's load and prices in advance, and demand-response event days are chosen with that knowledge. A real controller earns less. For demand charges, the pro-forma applies a [peak matching efficiency](how-it-works.md#peak-matching) from a day-ahead forecast error you set; it scales the whole load up or down a day at a time and does not model a forecast that gets the shape of the day wrong. Energy savings, program revenue and Value Stack credits are not derated.
 - **Fixed sizes.** Power and energy are inputs; to compare sizes, run each.
 - **Degradation is usable energy only.** The capacity curve keeps power, efficiency and the cycle limit; there is no power or efficiency fade.
 - **The load presets are synthetic** multifamily buildings. For a real analysis, scale a preset to the building's bills or upload its interval data.

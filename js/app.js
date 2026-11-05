@@ -10,6 +10,7 @@ import { CURVE_LEVELS, pctOf, atLevel, curvePoint, capacityCurve } from './curve
 import { barChart, lineChart } from './charts.js';
 import { monthlyEnergyKwh, monthlyPeakKw } from './tariff.js';
 import { TEMPLATE_URL, XLSX_TYPE, proformaData, fillProforma } from './proforma.js';
+import { peakMatchFor, FORECAST_ERROR } from './peakmatch.js';
 import * as edition from './edition.js';
 import { APP_VERSION, newProject, fingerprint, fileSlug, projectFile, readProjectFile, readProjectDoc, runSnapshot, solFromSnapshot, projectHash, readProjectHash } from './project.js';
 import { STORE } from './store.js';
@@ -35,7 +36,7 @@ const DEFAULTS = {
   programs: { enabled: { csrp: false, dlrp: false, term_dlm: false, auto_dlm: false }, network: '', pledgeKw: 100, participation: 'direct', events: { csrp: 3, dlrp: 2, term_dlm: 3, auto_dlm: 3 }, termDlm: { reservationRate: '', performanceRate: '' }, autoDlm: { reservationRate: '', performanceRate: '' } },
   valueStack: { election: 'value_stack', lsrv: false, lsrvEvents: 10, alt3: { hours: [15, 18], days: 10, rate: null }, riderT: { csrp: true, dlrp: true }, acProgram: 'auto_dlm', acDlrp: false },
   load: { mode: 'preset', presetId: 'highrise_central_cooling', billTarget: null, billMode: 'annual', monthlyBills: null, billShape: 'highrise_central_cooling', uploadUnits: 'auto', loadTab: 'preset' },
-  battery: { kw: 200, kwh: 400, rte: 88, usable: 95, cycles: 300, throughputCost: 0, capexK: '', curve: true },
+  battery: { kw: 200, kwh: 400, rte: 88, usable: 95, cycles: 300, throughputCost: 0, capexK: '', curve: true, forecastError: FORECAST_ERROR * 100 },
 };
 
 let state = loadState();
@@ -777,6 +778,7 @@ async function stepBattery() {
       ${field('Annual cycle limit', numInput('battery.cycles', B.cycles, { step: 1, min: 0, unit: 'cycles / yr' }), 'Equivalent full cycles of discharged energy per year (warranty cap). 0 = unlimited.')}
       ${field('Throughput cost', numInput('battery.throughputCost', B.throughputCost, { step: 0.001, min: 0, unit: '$/kWh' }), 'Optional degradation charge per kWh discharged; stops cycling for pennies.')}
       ${field('Installed cost (optional)', numInput('battery.capexK', B.capexK, { step: 1, min: 0, unit: 'k$', nullable: true }), 'Thousands of dollars. Used for a simple payback figure and as the pro-forma\'s capital cost.')}
+      ${state.modality === 'ftm' ? '' : field('Day-ahead forecast error', numInput('battery.forecastError', B.forecastError, { step: 0.5, min: 0, max: 30, unit: '%' }), 'How far a day-ahead forecast of the building\'s load is off (one standard deviation). Sets the peak matching efficiency the pro-forma applies to demand savings; the dispatch itself does not change.')}
     </div>
     <label class="check"><input type="checkbox" data-path="battery.curve" ${B.curve !== false ? 'checked' : ''}><span>Capacity curve for degradation <span class="d">Also solves the year at ${CURVE_BELOW}% of the usable energy, two at a time, so the pro-forma can follow capacity fade and a replacement without another run.${state.modality === 'btm_vs' ? ' Behind the meter with exports this about doubles the run time.' : ''}</span></span></label>
     ${acct && state.modality !== 'btm' ? `<p class="${acct.standby ? 'flag' : 'ok'}">${state.modality === 'ftm' ? 'Charging account' : 'Building account with the battery'}: <b>${accountLabel(acct)}</b>. ${esc(acct.reason)}</p>` : ''}
@@ -968,7 +970,7 @@ async function stepResults() {
     ...sup.warnings.map(esc),
     R.stack.account.standby ? `Non-exporting battery: imports never go negative, no Rider R / Value Stack; the building is on standby (Rate ${roman[state.rateNo]}) with and without it.` : `Non-exporting battery: imports never go negative, no Rider R / Value Stack, no standby (Rate IV / V) rates.`,
     ...(R.stack.account.sc === 9 && R.stack.account.rateNo === 1 ? [MAX_RATE_NOTE] : []),
-    `Perfect-foresight dispatch over the model year (2027 calendar, DST ignored); cyclic state of charge; LP relaxation with a post-solve netting of simultaneous charge and discharge.`,
+    `Perfect-foresight dispatch over the model year (2027 calendar, DST ignored); cyclic state of charge; LP relaxation with a post-solve netting of simultaneous charge and discharge. ${peakMatchNote(R)}`,
     `Cycle budget: ${fmtN(S.throughputKwh)} kWh discharged = ${S.cycles.toFixed(0)} equivalent full cycles${S.cycleLimit ? ` of the ${S.cycleLimit} allowed` : ' (no cap)'}.` + cycleNote(R),
     ...(R.stack.drOnly ? ['Demand response only: discharging is limited to the enrolled programs\' event intervals; charging is optimised against the bill, which includes its cost and any demand it adds.'] : []),
     ...(R.stack.programs.notes || []).map(esc),
@@ -992,6 +994,7 @@ async function stepResults() {
     <h3>Monthly peaks</h3>
     <div id="chartPeaks"></div>
     <div class="tablewrap"><table><thead><tr><th>Month</th><th class="num">Peak before kW</th><th class="num">Peak after kW</th><th class="num">Reduction kW</th><th class="num">Demand $ saved</th><th class="num">Extra kWh (losses)</th></tr></thead><tbody>${monthRows}</tbody></table></div>
+    ${peakMatchHtml(R)}
     <h3>Dispatch</h3>
     <div class="inline"><label class="lab" for="weekSel" style="margin:0">Week</label><select id="weekSel">${weeks.map((w) => `<option value="${w.start}" ${w.selected ? 'selected' : ''}>${w.label}</option>`).join('')}</select></div>
     <div id="chartWeek"></div>
@@ -1049,7 +1052,7 @@ function resultsValueStack(R) {
     ...(R.sol.timing && R.sol.timing.hourly ? ['Solved hour by hour: with no load and prices and windows constant within each hour, the hourly dispatch is exactly as good as a 15-minute one.'] : []),
     ...(R.sol.timing && R.sol.timing.firstPassHourly ? ['Behind the meter a first solve on hourly averages picked each DRV-window interval\'s side (import or export); the 15-minute solve then held each to it, so no interval both imports and exports.'] : []),
     ...(R.sol.timing && R.sol.timing.firstPassWash ? [`Behind the meter the first solve both imported and exported in ${R.sol.timing.firstPassWash} window intervals; a second solve fixed each to its net side.`] : []),
-    `Perfect-foresight dispatch over the model year (2027 calendar, DST ignored); cyclic state of charge; ${S.cycles.toFixed(0)} equivalent full cycles${S.cycleLimit ? ` of the ${S.cycleLimit} allowed` : ''}.` + cycleNote(R),
+    `Perfect-foresight dispatch over the model year (2027 calendar, DST ignored); cyclic state of charge; ${S.cycles.toFixed(0)} equivalent full cycles${S.cycleLimit ? ` of the ${S.cycleLimit} allowed` : ''}.` + cycleNote(R) + (ftm ? '' : ` ${peakMatchNote(R)}`),
     ...vs.notes.map(esc), ...(R.stack.programs.notes || []).map(esc),
     'SC 11 charges are not added: the customer charge is waived when another service class serves the same connection, and stand-alone storage is exempt from the SC 11 contract demand charge for 15 years if it qualifies by the end of 2030.',
   ];
@@ -1073,7 +1076,7 @@ function resultsValueStack(R) {
     <h3>Credits by month</h3>
     <div id="chartCredits"></div>
     <div class="tablewrap"><table><thead><tr><th>Month</th><th class="num">Energy</th><th class="num">Alt 3</th><th class="num">DRV</th>${vs.lsrv ? '<th class="num">LSRV</th>' : ''}<th class="num">Total</th></tr></thead><tbody>${monthRows}</tbody></table></div>
-    ${ftm ? '' : '<h3>Monthly peaks</h3><div id="chartPeaks"></div>'}
+    ${ftm ? '' : `<h3>Monthly peaks</h3><div id="chartPeaks"></div>${peakMatchHtml(R)}`}
     <h3>Dispatch</h3>
     <div class="inline"><label class="lab" for="weekSel" style="margin:0">Week</label><select id="weekSel">${weeks.map((w) => `<option value="${w.start}" ${w.selected ? 'selected' : ''}>${w.label}</option>`).join('')}</select></div>
     <div id="chartWeek"></div>
@@ -1100,6 +1103,48 @@ function curveHtml(R) {
 function curveNote(R) {
   return R.curve ? `Degradation through the capacity curve: the year solved again at ${CURVE_BELOW}% of the usable energy, with power, efficiency and the cycle limit (on nameplate kWh) unchanged.`
     : 'No capacity curve: the pro-forma holds savings at Year 1.';
+}
+
+// Peak matching (js/peakmatch.js): how much of the demand savings a
+// controller working from a day-ahead load forecast can expect to keep, at
+// the forecast error set on the Battery step. Worked out from the run's load
+// and battery when the page draws (a tenth of a second), so a kept run gets it too.
+const forecastError = () => {
+  const v = state.battery.forecastError;
+  return v === '' || v === null || v === undefined || !Number.isFinite(+v) ? FORECAST_ERROR : Math.min(0.3, Math.max(0, +v / 100));
+};
+const peakMatches = new WeakMap();
+function peakMatchOf(R) {
+  const fe = forecastError(), hit = peakMatches.get(R);
+  if (hit && hit.forecastError === fe) return hit;
+  const pm = peakMatchFor({ stack: R.stack, load: R.load.kw, battery: R.battery, forecastError: fe });
+  peakMatches.set(R, pm);
+  return pm;
+}
+const pctTxt = (v, d = 0) => `${(v * 100).toFixed(d)}%`;
+function peakMatchExpected(R) {
+  const pm = peakMatchOf(R);
+  const saved = R.summary.monthly.map((m) => m.demandBefore - m.demandAfter);
+  const total = saved.reduce((a, v) => a + v, 0);
+  const expected = pm.applies ? saved.reduce((a, v, i) => a + v * pm.months[i].efficiency, 0) : total;
+  return { pm, saved, total, expected, share: Math.abs(total) > 1e-6 ? expected / total : 1 };
+}
+function peakMatchNote(R) {
+  const { pm, share } = peakMatchExpected(R);
+  if (!pm.applies) return pm.reason === 'dr_only' ? 'Demand response only: no peak shaving to derate, so the pro-forma\'s peak matching efficiency is 100%.' : '';
+  return `The pro-forma derates demand savings month by month for a day-ahead load forecast ${pctTxt(pm.forecastError, 1)} off (peak matching efficiency, ${pctTxt(share)} for the year).`;
+}
+function peakMatchHtml(R) {
+  const { pm, saved, total, expected, share } = peakMatchExpected(R);
+  if (!pm.applies) return pm.reason === 'dr_only' ? '<p class="note">Peak matching: in demand response only the battery discharges in program events alone, at times the utility sets, so there is no peak shaving to derate. The pro-forma\'s peak matching efficiency is 100% in every month.</p>' : '';
+  const rows = R.summary.monthly.map((m, i) => {
+    const p = pm.months[i], cut = m.peakBefore - m.peakAfter;
+    return `<tr><td>${m.month}</td><td class="num">${p.shaveDays}</td><td class="num">${fmtN(cut)}</td><td class="num">${fmtN(cut * p.efficiency)}</td><td class="num">${pctTxt(p.efficiency)}</td><td class="num">${fmt$(saved[i] * p.efficiency)}</td></tr>`;
+  }).join('');
+  const lo = pm.months.reduce((a, p, i) => (p.efficiency < pm.months[a].efficiency ? i : a), 0);
+  return `<h3>Peak matching, without perfect foresight</h3>
+    <p class="note">The dispatch knows the whole year's load in advance; a controller works from a day-ahead forecast. With one ${pctTxt(pm.forecastError, 1)} off (one standard deviation, set on the Battery step), it can expect to keep about <b>${pctTxt(share)}</b> of the demand savings: <b>${fmt$(expected)}</b> of ${fmt$(total)} a year. A month's demand charge is set by its worst interval, so every day the battery has to shave is a chance for a forecast error to let the peak through, and months with many such days keep least (here ${MONTH_NAMES[lo]}, ${pctTxt(pm.months[lo].efficiency)}). The pro-forma applies these monthly percentages to its demand savings; the bill above stays the perfect-foresight value.</p>
+    <div class="tablewrap"><table><thead><tr><th>Month</th><th class="num">Days to shave</th><th class="num">Peak cut, perfect kW</th><th class="num">Peak cut expected kW</th><th class="num">Peak matching</th><th class="num">Demand $ expected</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 // The state of charge month by month, and the backup it gives the building:
@@ -1197,6 +1242,7 @@ function afterResults() {
         election: R.stack.valueStack ? ELECTIONS[state.valueStack.election] : undefined,
         programMonths: programMonths(),
         curve: R.curve,
+        peakMatch: peakMatchOf(R),
         saved: savedInfo(R),
         hosted: STORE.kind === 'server',
         monthlyBills: R.load.source === 'bill' && L.billMode === 'monthly' && L.monthlyBills ? L.monthlyBills : null,
@@ -1211,7 +1257,7 @@ function afterResults() {
     }
   });
   $('#dlJson').addEventListener('click', () => {
-    const out = { project: { ...runIdentity(R), saved: savedInfo(R) }, inputs: stackConfig(), battery: R.battery, load: { label: R.load.label, source: R.load.source, stats: stats(R.load.kw) }, baseline: R.baseline, withBattery: R.withB, programRevenue: R.revenue, valueStackCredits: R.credits, electionComparison: R.alternative, capacityCurve: R.curve, stateOfCharge: { backupShareOfPeak: state.modality === 'ftm' ? null : BACKUP_SHARE, byMonth: backupRows(R) }, summary: R.summary, generated: new Date().toISOString() };
+    const out = { project: { ...runIdentity(R), saved: savedInfo(R) }, inputs: stackConfig(), battery: R.battery, load: { label: R.load.label, source: R.load.source, stats: stats(R.load.kw) }, baseline: R.baseline, withBattery: R.withB, programRevenue: R.revenue, valueStackCredits: R.credits, electionComparison: R.alternative, capacityCurve: R.curve, peakMatching: peakMatchOf(R), stateOfCharge: { backupShareOfPeak: state.modality === 'ftm' ? null : BACKUP_SHARE, byMonth: backupRows(R) }, summary: R.summary, generated: new Date().toISOString() };
     download(`${fileSlug(state.project.name)}_results.json`, JSON.stringify(out, (k, v) => (v instanceof Float64Array || v instanceof Int32Array ? undefined : v), 1), 'application/json');
   });
   $('#dlDispatch').addEventListener('click', () => {

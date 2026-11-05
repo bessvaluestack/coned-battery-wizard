@@ -45,6 +45,20 @@ The year solved again with less usable energy (see [Battery](battery.md#the-capa
 - **Monthly peaks** (behind the meter): each month's billing peak before and with the battery, with the demand dollars saved and the extra kWh the battery's losses add.
 - **Dispatch**: a week at a time (pick any week; it opens on the week of the peak, or a stand-alone battery's busiest export week): the building load, grid import and, with exports, grid export, and the state of charge below.
 
+### Peak matching
+
+Under the monthly peaks (behind the meter), what a controller working from a day-ahead forecast can expect to keep of the demand savings, at the forecast error set on the Battery step (see [How the model works](how-it-works.md#peak-matching)): the year's share and dollars in a note, and by month:
+
+| Column | Meaning |
+|---|---|
+| Days to shave | Days the battery has to bring below the month's best line, each a chance for a forecast error to let the peak through |
+| Peak cut, perfect kW | The billing peak cut with perfect foresight |
+| Peak cut expected kW | That times the efficiency |
+| Peak matching | The month's peak matching efficiency, which the pro-forma applies to its demand savings |
+| Demand $ expected | The month's demand savings times the efficiency |
+
+The bill and the headline stay the perfect-foresight values. With [demand response only](demand-response.md#demand-response-only) a note says there is no peak shaving to derate.
+
 ### State of charge and backup
 
 After the dispatch, a chart shows the energy the battery holds on average in each month, and a table and note turn it into backup:
@@ -63,14 +77,14 @@ Where 25% of the peak is more than the battery's power, the battery carries only
 
 ### Assumptions and provenance
 
-The list says what the run used: the account and rate, the statements in force, the supply, the cycles run against the limit (and whether the limit binds, with what one more cycle would be worth), the Value Stack terms, the capacity curve, and anything the model simplifies.
+The list says what the run used: the account and rate, the statements in force, the supply, the cycles run against the limit (and whether the limit binds, with what one more cycle would be worth), the Value Stack terms, the capacity curve, the peak matching applied to the pro-forma, and anything the model simplifies.
 
 ## Downloads
 
 | Download | What is in it |
 |---|---|
 | Pro-forma (XLSX) | The owner's workbook filled from the run: see [The owner pro-forma](proforma.md) |
-| Results (JSON) | Everything the run computed: the project and its configuration fingerprint, inputs, battery, load statistics, both bills, program revenue, Value Stack credits, the election comparison, the capacity curve, the state of charge and backup by month, and the summary |
+| Results (JSON) | Everything the run computed: the project and its configuration fingerprint, inputs, battery, load statistics, both bills, program revenue, Value Stack credits, the election comparison, the capacity curve, the peak matching efficiency by month, the state of charge and backup by month, and the summary |
 | Dispatch (CSV) | Every 15-minute interval: timestamp, load, import, export, charge, discharge, state of charge and the all-in price |
 
 **Change inputs and re-run** goes back to the Battery step.

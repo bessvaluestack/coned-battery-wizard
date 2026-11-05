@@ -13,9 +13,12 @@ The **Battery** step sizes the system and runs the year. Sizes are inputs, not o
 | Annual cycle limit | 300 cycles / yr | Equivalent full cycles of discharged energy a year, as a warranty caps them; 0 = unlimited |
 | Throughput cost | $0 / kWh | An optional charge per kWh discharged, to stop the battery cycling for pennies |
 | Installed cost | blank | Optional, in thousands of dollars: gives a simple payback and goes on the pro-forma's capital cost line |
+| Day-ahead forecast error | 5% | How far a day-ahead forecast of the building's load is off, one standard deviation. Sets the [peak matching efficiency](how-it-works.md#peak-matching) the pro-forma applies to demand savings; the dispatch does not change. Not shown for a stand-alone battery |
 | Capacity curve for degradation | on | Also solves the year at 90, 80, 70 and 60% of the usable energy (below) |
 
 One equivalent full cycle is a discharge equal to the nameplate energy: 300 cycles of a 400 kWh battery is 120 MWh discharged in the year.
+
+The forecast error is an assumption about the controller, not something the wizard can measure: 5% is a middling figure for a day-ahead forecast of one building's load. Use the controller vendor's accuracy if you have it, lower (3%, say) for a good forecast that uses weather data, higher (10%) for a poor one. On the load presets, 5% keeps about 70 to 85% of the demand savings and 10% about 40 to 65%.
 
 ## The capacity curve
 

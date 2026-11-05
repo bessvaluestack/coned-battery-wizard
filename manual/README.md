@@ -19,7 +19,8 @@ The wizard covers three kinds of project, chosen on the first step:
 - **The annual value**: bill savings by component, demand-response revenue by program, Value Stack credits by component, and the net benefit.
 - **The dispatch**: a week of charging, discharging and state of charge, and the whole year as a CSV file.
 - **A capacity curve**: the same year solved again with 90, 80, 70 and 60% of the usable energy, so a fading battery can be followed for years without another run.
-- **The owner pro-forma**: an Excel workbook with the year's 8,760 hours, the monthly bill and every demand charge, and a cash flow that applies your capital costs, degradation and replacement.
+- **Peak matching**: how much of the demand savings a controller working from a day-ahead forecast can expect to keep, month by month.
+- **The owner pro-forma**: the owner's Excel financial model, filled from the run: the year's 8,760 hours, the monthly bill and every demand charge, and a cash flow that applies peak matching, your capital costs, degradation, replacement, incentives and financing.
 
 ## Where it runs
 

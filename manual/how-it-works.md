@@ -23,7 +23,7 @@ The battery's sizes are fixed; the dispatch is optimised over the whole year at 
 - **minimise** the energy cost, every demand charge, any throughput cost, less program payments and Value Stack credits;
 - **subject to** the energy balance in every interval, the state of charge from one interval to the next (round-trip efficiency split evenly), the power and usable-energy limits, the annual discharge budget, and a state of charge that ends the year where it started.
 
-The dispatch has **perfect foresight**: it knows the whole year's load and prices in advance. A real controller does worse, so treat the results as the value available, not a guarantee.
+The dispatch has **perfect foresight**: it knows the whole year's load and prices in advance. A real controller does worse, so treat the results as the value available, not a guarantee. For demand charges, [peak matching](#peak-matching) estimates how much of the value a controller can expect to keep.
 
 When nothing else decides when the battery charges (prices flat within the day, say), a tie-break worth a few dollars a year makes it recharge early and stay ready, as a controller holding a reserve would, rather than leaving the state of charge wherever the solver happens to. It changes the year's value by cents.
 
@@ -40,6 +40,20 @@ Exports come from discharge only, credited on each hour's net injection. The DRV
 Inside the window a battery behind a building's meter can earn more exporting than the building pays importing, so each window interval is held to one side, import or export. A first solve on hourly averages picks the side; the exact 15-minute solve follows. If the cycle limit binds, both passes run at 15 minutes.
 
 A commitment the battery cannot hold over the building's load is dropped, with a note.
+
+## Peak matching
+
+A month's demand charge is set by its single worst interval. The dispatch knows the whole year in advance, so it shaves every day to exactly the lowest line the battery can hold. A real controller does not know the load until it happens: it picks each day's target from a day-ahead forecast. A forecast too high makes it stop short; one too low makes it shave too deep early in the evening, run short before the peak passes, and let the peak through. One such day sets the month's bill.
+
+The **peak matching efficiency** is the share of each month's demand savings a controller working from a forecast can expect to keep. It is worked out after the run:
+
+1. For every day, the lowest line the battery could hold, day after day (starting full, recharging below the line, and ending the day no emptier than it started), for the day's actual load and for the same load scaled up and down.
+2. 400 simulated forecast years. Each day's forecast is off by a factor drawn from a normal distribution with the [forecast error](battery.md#inputs) as its standard deviation (5% by default). The controller aims at the line it believes it can hold, never below the month's peak so far. When it aims too high, the peak lands where it aimed; when it aims too low, it lands as far above the true line as the aim was below it.
+3. The month's expected peak is the average over the forecast years. The efficiency is the expected peak cut over the cut with a perfect forecast.
+
+The more days in a month that need the battery's full energy, the more chances one of them goes wrong, so the efficiency falls with the number of days the battery has to shave. A month with one hot afternoon keeps most of its savings; a month of identical cold evenings keeps less. The draws are seeded, so the same inputs always give the same efficiencies.
+
+The efficiency is a ratio, applied to the dispatch's demand savings month by month in the pro-forma (see [The owner pro-forma](proforma.md#peak-matching-efficiency)). The results page shows the bill with perfect foresight and, under the monthly peaks, what peak matching leaves of the demand savings.
 
 ## The capacity curve
 

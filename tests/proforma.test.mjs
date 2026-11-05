@@ -5,8 +5,10 @@ import { readFileSync } from 'node:fs';
 import { unzipSync, strFromU8 } from '../vendor/fflate/fflate.mjs';
 import { buildStack, billFor, summarize, chargingAccount } from '../js/model.js';
 import { valueStackCredits } from '../js/valuestack.js';
-import { proformaData, fillProforma } from '../js/proforma.js';
-import { fieldCell, monthCell, termCell, UTILITY_COLS, PROGRAM_COLS, VS_COLS, LAYOUT, WIZ_SHEET } from '../js/wizardsheet.js';
+import { proformaData, fillProforma, CAPITAL_CELLS, tariffCalendar } from '../js/proforma.js';
+import { sheetPaths } from '../js/xlsx.js';
+import { fieldCell, monthCell, termCell, colOf, UTILITY_COLS, PROGRAM_COLS, VS_COLS, PEAK_MATCH_COLS, SEASON_COLS, TOU_COLS, HOURLY_COLS, LAYOUT, WIZ_SHEET } from '../js/wizardsheet.js';
+import { peakMatchFor } from '../js/peakmatch.js';
 import { projectFile, readProjectFile, fingerprint, newProject } from '../js/project.js';
 import { bannedWords } from '../scripts/build.mjs';
 
@@ -19,24 +21,30 @@ const template = readFileSync(new URL('../templates/proforma.xlsx', import.meta.
 const cell = (xml, ref) => (xml.match(new RegExp(`<c r="${ref}"[^>]*?(?:/>|>(.*?)</c>)`, 's')) || [])[1] || '';
 const num = (xml, ref) => +((cell(xml, ref).match(/<v>([^<]*)<\/v>/) || [])[1]);
 const text = (xml, ref) => ((cell(xml, ref).match(/<t[^>]*>([^<]*)<\/t>/) || [])[1] || '');
-const sheets = (files) => Object.fromEntries([['inputs', 1], ['rates', 2], ['hourly', 3], ['vs', 4], ['cf', 5], ['out', 6], ['wiz', 7]].map(([k, n]) => [k, strFromU8(files[`xl/worksheets/sheet${n}.xml`])]));
+const SHEET_KEYS = { inputs: 'Inputs', rates: 'Utility_Rates', hourly: 'Hourly_Operations', vs: 'Value_Streams', cf: 'Project_Cash_Flow', out: 'Outputs', wiz: WIZ_SHEET };
+const sheets = (files) => { const P = sheetPaths(files); return Object.fromEntries(Object.entries(SHEET_KEYS).map(([k, n]) => [k, strFromU8(files[P[n]])])); };
+// Hour h's cell in the hourly block on Wizard_Import.
+const hourCell = (key, h) => `${colOf(HOURLY_COLS, key)}${LAYOUT.hourlyData.first + h}`;
+const link = (c) => new RegExp(`${WIZ_SHEET}!\\$?${c.replace(/(\d+)/, '\\$?$1')}(?!\\d)`);
 
-test('template: recalculates on open, no calc chain, no author or local path, no internal names', () => {
+test('template: recalculates on open, automatically; no calc chain, no author or local path, no internal names', () => {
   const files = unzipSync(template);
   assert.ok(!files['xl/calcChain.xml']);
   const wb = strFromU8(files['xl/workbook.xml']);
   assert.match(wb, /fullCalcOnLoad="1"/);
-  assert.doesNotMatch(wb, /absPath/);
+  assert.doesNotMatch(wb, /absPath|calcMode="manual"/);
   assert.doesNotMatch(strFromU8(files['docProps/core.xml']), /lastModifiedBy/);
   for (const [p, bytes] of Object.entries(files)) if (/\.xml$|\.rels$/.test(p)) assert.deepEqual(bannedWords(strFromU8(bytes)), [], p);
 });
 
-test('template: no sample project; zero where the notes say "none"', () => {
+test('template: no sample project; the model\'s general assumptions stay', () => {
   const files = unzipSync(template);
-  const inputs = strFromU8(files['xl/worksheets/sheet1.xml']);
-  for (const ref of ['C6', 'C7', 'C8', 'C22', 'C25', 'C32', 'C38', 'C42', 'C43', 'C48', 'C52']) assert.equal(cell(inputs, ref), '', ref);
-  for (const ref of ['C26', 'C27', 'C28', 'C29', 'C47']) assert.equal(num(inputs, ref), 0, ref);
-  assert.match(cell(inputs, 'C46'), /Flat annual/);
+  const { inputs, wiz } = sheets(files);
+  for (const ref of ['C6', 'C7', 'C8', ...CAPITAL_CELLS, 'C50', 'C51', 'C52', 'C53', 'C54']) assert.equal(cell(inputs, ref), '', ref);
+  for (const ref of ['C49', 'C61', 'C78']) assert.equal(num(inputs, ref), 0, ref);
+  for (const ref of ['C24', 'C44', 'C45', 'C58']) assert.ok(Number.isFinite(num(inputs, ref)), ref);
+  assert.doesNotMatch(strFromU8(files['xl/sharedStrings.xml']), /Southchester|New Rochelle/);
+  assert.doesNotMatch(wiz, /<hyperlink|b5ee2e6b/, 'no sample project left on Wizard_Import');
   // Every shared string left with text is one some cell still uses.
   const used = new Set();
   for (const [p, bytes] of Object.entries(files)) if (/^xl\/worksheets\/sheet\d+\.xml$/.test(p)) for (const [, i] of strFromU8(bytes).matchAll(/t="s"[^>]*><v>(\d+)<\/v>/g)) used.add(+i);
@@ -45,7 +53,41 @@ test('template: no sample project; zero where the notes say "none"', () => {
   });
 });
 
-test('fill: the wizard writes Wizard_Import and the hourly rows; the model links to them', () => {
+test('template: the model\'s inputs the wizard provides link to Wizard_Import; the capacity curve block below it stays put', () => {
+  const S = sheets(unzipSync(template));
+  for (const [c, key] of [['D', 'baseline'], ['E', 'dispatch'], ['H', 'rate'], ['L', 'exportRate']]) {
+    assert.match(cell(S.hourly, `${c}6`), link(hourCell(key, 0)), `${c}6`);
+    assert.match(cell(S.hourly, `${c}8765`), link(hourCell(key, 8759)), `${c}8765`);
+    assert.equal((S.hourly.match(new RegExp(`<c r="${c}\\d+" s="\\d+"><f>IF\\(ISNUMBER\\(${WIZ_SHEET}!${colOf(HOURLY_COLS, key)}\\d+\\)`, 'g')) || []).length, 8760, c);
+  }
+  for (const m of [0, 5, 11]) assert.match(cell(S.rates, `K${6 + m}`), link(monthCell('season', SEASON_COLS, 'season', m)));
+  assert.match(cell(S.rates, 'C29'), link(`${colOf(TOU_COLS, 'summerWeekday')}${LAYOUT.tou.first}`));
+  assert.match(cell(S.rates, 'F52'), link(`${colOf(TOU_COLS, 'winterWeekend')}${LAYOUT.tou.first + 23}`));
+  // Value_Streams: C the peak matching efficiency, H each month's own demand savings, I the two multiplied.
+  for (const m of [0, 1, 6, 11]) {
+    assert.match(cell(S.vs, `C${6 + m}`), link(monthCell('peakMatch', PEAK_MATCH_COLS, 'efficiency', m)), `C${6 + m}`);
+    assert.match(cell(S.vs, `H${6 + m}`), link(monthCell('utility', UTILITY_COLS, 'demandSav', m)), `H${6 + m}`);
+  }
+  assert.match(cell(S.vs, 'I9'), /IF\(AND\(ISNUMBER\(H9\),ISNUMBER\(C9\)\),H9\*C9,""\)/);
+  assert.doesNotMatch(cell(S.vs, 'I18'), /"1"/);
+  // The rest of the model's links, as it has them.
+  assert.match(cell(S.inputs, 'C14'), new RegExp(`${WIZ_SHEET}!\\$C\\$${LAYOUT.project.rows.exports}\\)?=TRUE`));
+  assert.match(cell(S.inputs, 'C16'), link(fieldCell('battery', 'kw')));
+  assert.match(cell(S.rates, 'C17'), link(monthCell('utility', UTILITY_COLS, 'actualBill', 11)));
+  assert.match(cell(S.vs, 'M12'), link(monthCell('programs', PROGRAM_COLS, 'total', 6)));
+  assert.match(cell(S.vs, 'O6'), link(monthCell('vs', VS_COLS, 'alt3', 0)));
+  assert.match(cell(S.vs, 'N6'), /Hourly_Operations!\$K\$6:\$K\$8765/);
+  assert.match(cell(S.hourly, 'K6'), /F6&lt;Inputs!\$C\$109\),-F6\*L6/);
+  assert.match(cell(S.cf, 'F109'), new RegExp(`INDEX\\(${WIZ_SHEET}!\\$L\\$${LAYOUT.curve.first}:\\$L\\$${LAYOUT.curve.last},`));
+  assert.match(cell(S.cf, 'F26'), /Value_Streams!\$N\$18\+Value_Streams!\$O\$18\+Value_Streams!\$P\$18/);
+  assert.match(cell(S.out, 'C13'), /Value_Streams!N18/);
+  // The capacity curve by month is gone; its rows stay empty, so nothing below moved.
+  for (let r = LAYOUT.curve.last + 2; r < LAYOUT.curveNote; r++) assert.doesNotMatch(S.wiz, new RegExp(`<row r="${r}"`), `row ${r}`);
+  assert.equal(LAYOUT.saved.head, 298);
+  assert.match(S.wiz, /<sheetProtection sheet="1"/);
+});
+
+test('fill: the wizard writes Wizard_Import, the year hour by hour included; the model links to it', () => {
   const stack = buildStack({ rateNo: 1, voltage: 'lt', region: 'nyc', zone: 'J', demandIntervalMin: 15, taxPct: 2.5, supply: { mode: 'coned_msc' } }, data);
   const load = Float64Array.from(read('profiles/midrise_gas_windowac.json').kw);
   // A stand-in dispatch: shave 10% off every evening, charge it back overnight.
@@ -66,19 +108,23 @@ test('fill: the wizard writes Wizard_Import and the hourly rows; the model links
   assert.equal(text(S.wiz, fieldCell('project', 'name')), 'Test building');
   assert.equal(text(S.wiz, fieldCell('project', 'rate')), 'SC 8 Rate I LT');
   assert.equal(num(S.wiz, fieldCell('battery', 'kw')), 100);
-  assert.match(cell(S.inputs, 'C16'), new RegExp(`${WIZ_SHEET}!\\$C\\$${LAYOUT.battery.rows.kw}`));
-  assert.match(cell(S.inputs, 'C10'), new RegExp(`${WIZ_SHEET}!\\$C\\$${LAYOUT.project.rows.rate}`));
+  assert.match(cell(S.inputs, 'C10'), link(fieldCell('project', 'rate')));
   // The installed cost is all-in: first capital line, the rest zero; none entered leaves them blank.
-  assert.deepEqual(['C32', 'C33', 'C34', 'C35', 'C36', 'C37', 'C38'].map((r) => num(S.inputs, r)), [400000, 0, 0, 0, 0, 0, 0]);
-  assert.ok(!('C32' in proformaData(run, {}).inputs));
-  // Every hour filled; baseline minus dispatch is the hour's mean import.
-  assert.equal((S.hourly.match(/<c r="H\d+" s="34"><v>/g) || []).length, 8760);
+  assert.deepEqual(CAPITAL_CELLS.map((r) => num(S.inputs, r)), [400000, 0, 0, 0, 0, 0, 0]);
+  assert.match(text(S.inputs, 'E34'), /All-in installed cost/);
+  assert.ok(!(CAPITAL_CELLS[0] in proformaData(run, {}).inputs));
+  // Every hour on Wizard_Import; baseline minus dispatch is the hour's mean import.
+  for (const key of ['baseline', 'dispatch', 'rate']) assert.ok(Number.isFinite(num(S.wiz, hourCell(key, 8759))), key);
+  assert.equal(cell(S.wiz, hourCell('exportRate', 0)), '', 'no export credit rate without exports');
   for (const h of [0, 18, 4000, 8759]) {
-    const r = 6 + h, meanImp = (imp[4 * h] + imp[4 * h + 1] + imp[4 * h + 2] + imp[4 * h + 3]) / 4;
-    assert.ok(Math.abs(num(S.hourly, `D${r}`) - num(S.hourly, `E${r}`) - meanImp) < 1e-4, `hour ${h}`);
+    const meanImp = (imp[4 * h] + imp[4 * h + 1] + imp[4 * h + 2] + imp[4 * h + 3]) / 4;
+    assert.ok(Math.abs(num(S.wiz, hourCell('baseline', h)) - num(S.wiz, hourCell('dispatch', h)) - meanImp) < 1e-4, `hour ${h}`);
   }
-  assert.ok(num(S.hourly, 'E7') < 0, '1 am charging is a negative dispatch');
-  assert.ok(num(S.hourly, 'E24') > 0, '6 pm shaving is a positive dispatch');
+  assert.ok(num(S.wiz, hourCell('dispatch', 1)) < 0, '1 am charging is a negative dispatch');
+  assert.ok(num(S.wiz, hourCell('dispatch', 18)) > 0, '6 pm shaving is a positive dispatch');
+  assert.equal(num(S.wiz, hourCell('hour', 18)), 19);
+  assert.equal(text(S.wiz, hourCell('start', 18)), '2027-01-01 18:00');
+  assert.equal(text(S.wiz, hourCell('start', 8759)), '2027-12-31 23:00');
   // The monthly bill: demand, energy and fixed add up to the bill savings, month by month and for the year.
   const u = (k, m) => num(S.wiz, monthCell('utility', UTILITY_COLS, k, m));
   let total = 0;
@@ -89,20 +135,70 @@ test('fill: the wizard writes Wizard_Import and the hourly rows; the model links
   assert.ok(Math.abs(total - summary.savingsBill) < 1e-6);
   assert.ok(Math.abs(num(S.wiz, fieldCell('summary', 'billSavings')) - summary.savingsBill) < 1e-6);
   assert.equal(u('actualBill', 11), 11100);
-  assert.match(cell(S.vs, 'G6'), new RegExp(`${WIZ_SHEET}!\\$J\\$${LAYOUT.utility.first}`));
-  assert.match(cell(S.rates, 'C17'), new RegExp(`${WIZ_SHEET}!\\$S\\$${LAYOUT.utility.first + 11}`));
+  // No peak matching computed: every month 100%, expected savings the perfect-foresight ones.
+  const pm = (k, m) => num(S.wiz, monthCell('peakMatch', PEAK_MATCH_COLS, k, m));
+  for (let m = 0; m < 12; m++) {
+    assert.equal(pm('efficiency', m), 1);
+    assert.ok(Math.abs(pm('demandExpected', m) - u('demandSav', m)) < 1e-9);
+  }
+  assert.match(text(S.wiz, fieldCell('peakMatchFields', 'basis')), /Not computed/);
+  // The tariff calendar: Con Edison's summer, and Rate I's one period.
+  assert.deepEqual(Array.from({ length: 12 }, (_, m) => text(S.wiz, monthCell('season', SEASON_COLS, 'season', m))).join(' '), 'Winter Winter Winter Winter Winter Summer Summer Summer Summer Winter Winter Winter');
+  assert.equal(text(S.wiz, `${colOf(TOU_COLS, 'summerWeekday')}${LAYOUT.tou.first + 18}`), 'Off-peak');
+  assert.equal(num(S.wiz, `B${LAYOUT.tou.first + 23}`), 23);
   // Program revenue by program and month.
   const p = (k, m) => num(S.wiz, monthCell('programs', PROGRAM_COLS, k, m));
   assert.ok(Math.abs(Array.from({ length: 12 }, (_, m) => p('total', m)).reduce((a, v) => a + v, 0) - 3000) < 1e-9);
   assert.ok(Math.abs(p('csrpRes', 6) - 500) < 1e-9 && Math.abs(p('csrpPerf', 6) - 200) < 1e-9); // July: a fifth of the reservation + the 7/14 event
   assert.equal(p('total', 0), 0);
   assert.equal(num(S.wiz, termCell('pledge', 'csrp')), 100);
-  assert.match(cell(S.vs, "K12"), new RegExp(`${WIZ_SHEET}!\\$K\\$${LAYOUT.programs.first + 6}`));
   // The demand determinants add up to the demand savings.
   const demandSaved = Array.from({ length: 12 }, (_, m) => u('demandSav', m)).reduce((a, v) => a + v, 0);
   let detSav = 0; for (let i = 0; i < 144; i++) { const v = num(S.wiz, `L${LAYOUT.demand.first + i}`); if (Number.isFinite(v)) detSav += v; }
   assert.ok(Math.abs(detSav - demandSaved) < 1e-6);
   assert.match(S.wiz, /<sheetProtection sheet="1"/);
+});
+
+test('fill: the peak matching efficiency by month, and the expected demand savings it gives', () => {
+  const stack = buildStack({ rateNo: 1, voltage: 'lt', region: 'westchester', zone: 'I', demandIntervalMin: 15, taxPct: 2.5, supply: { mode: 'coned_msc' } }, data);
+  const load = Float64Array.from(read('profiles/midrise_gas_windowac.json').kw);
+  const imp = Float64Array.from(load, (kw, t) => { const hr = Math.floor((t % 96) / 4); return hr >= 17 && hr < 21 ? kw * 0.85 : hr < 4 ? kw + 30 : kw; });
+  const sol = { imp, dis: new Float64Array(load.length) };
+  const battery = { kw: 100, kwh: 200, rte: 0.88, usableFrac: 0.95, cyclesPerYear: 0, throughputCost: 0 };
+  const base = billFor(stack, load), withB = billFor(stack, imp), revenue = { total: 0, streams: [] };
+  const summary = summarize(stack, load, battery, base, withB, null, null, sol, revenue);
+  const peakMatch = peakMatchFor({ stack, load, battery, forecastError: 0.05 });
+  const d = proformaData({ stack, load, sol, summary, revenue, battery, baseline: base, withB }, { peakMatch });
+  const S = sheets(unzipSync(fillProforma(template, d)));
+  const pm = (k, m) => num(S.wiz, monthCell('peakMatch', PEAK_MATCH_COLS, k, m)), u = (k, m) => num(S.wiz, monthCell('utility', UTILITY_COLS, k, m));
+  for (let m = 0; m < 12; m++) {
+    const e = pm('efficiency', m);
+    assert.ok(e > 0.3 && e < 1, `month ${m + 1}: ${e}`);
+    assert.equal(e, peakMatch.months[m].efficiency);
+    assert.equal(pm('shaveDays', m), peakMatch.months[m].shaveDays);
+    assert.ok(Math.abs(pm('demandExpected', m) - e * u('demandSav', m)) < 1e-9);
+    assert.ok(Math.abs(pm('cutExpected', m) - e * (u('peakBase', m) - u('peakAfter', m))) < 1e-9);
+  }
+  assert.equal(num(S.wiz, fieldCell('peakMatchFields', 'forecastError')), 0.05);
+  assert.match(text(S.wiz, fieldCell('peakMatchFields', 'basis')), /Value_Streams C/);
+  assert.match(cell(S.wiz, `${colOf(PEAK_MATCH_COLS, 'efficiency')}${LAYOUT.peakMatch.total}`), /<f>/, 'the year\'s efficiency is a formula');
+  // A stand-alone battery, or demand response only: nothing to derate.
+  assert.equal(peakMatchFor({ stack: { ...stack, modality: 'ftm' }, load, battery }).applies, false);
+  assert.equal(peakMatchFor({ stack: { ...stack, drOnly: true }, load, battery }).reason, 'dr_only');
+  const flat = proformaData({ stack, load, sol, summary, revenue, battery, baseline: base, withB }, { peakMatch: peakMatchFor({ stack: { ...stack, drOnly: true }, load, battery }) });
+  assert.ok(flat.wizard.peakMatch.every((r) => r.efficiency === 1));
+  assert.match(flat.wizard.peakMatchFields.basis, /demand response only/);
+});
+
+test('tariff calendar: time-of-day periods from the windows of each rate', () => {
+  const t9 = read('tariffs_sc9.json');
+  const row = (cal, k) => cal.tou.map((x) => x[k][0]).join('');
+  const r1 = tariffCalendar(t9.corpus_ced_sc9_rate1_lt), r2 = tariffCalendar(t9.corpus_ced_sc9_rate2_lt);
+  assert.equal(row(r1, 'summerWeekday'), 'O'.repeat(24));
+  assert.equal(row(r2, 'summerWeekday'), 'OOOOOOOOPPPPPPPPPPSSSSOO', 'summer weekday: 8-18 inside both windows, 18-22 inside one');
+  assert.equal(row(r2, 'winterWeekday'), 'OOOOOOOOPPPPPPPPPPPPPPOO');
+  assert.equal(row(r2, 'summerWeekend'), 'O'.repeat(24));
+  assert.deepEqual(r2.season.filter((s) => s.season === 'Summer').map((s) => s.month), ['Jun', 'Jul', 'Aug', 'Sep']);
 });
 
 test('project file: saves the inputs and the upload, opens back, and the fingerprint follows the configuration', () => {
@@ -119,22 +215,6 @@ test('project file: saves the inputs and the upload, opens back, and the fingerp
   assert.notEqual(fingerprint({ a: 1 }), fingerprint({ a: 2 }));
 });
 
-test('template: Value Stack columns, the export flag and the cash-flow stream', () => {
-  const files = unzipSync(template);
-  const [inputs, , hourly, vs, cf, out] = [1, 2, 3, 4, 5, 6].map((n) => strFromU8(files[`xl/worksheets/sheet${n}.xml`]));
-  assert.match(cell(inputs, 'C14'), new RegExp(`${WIZ_SHEET}!\\$C\\$${LAYOUT.project.rows.exports}\\)?=TRUE`));
-  assert.match(cell(inputs, 'C62'), /OR\(C59=\$C\$68,C14=TRUE\)/);
-  assert.match(cell(inputs, 'C65'), /AND\(C59&gt;C68,C14&lt;&gt;TRUE\)/);
-  for (const [ref, text] of [['L5', 'Export credits'], ['M5', 'Capacity'], ['N5', 'Account change']]) assert.match(cell(vs, ref), new RegExp(text), ref);
-  assert.match(cell(vs, 'L6'), /Hourly_Operations!\$K\$6:\$K\$8765/);
-  assert.match(cell(vs, 'P18'), /SUM\(G18,J18,K18,L18,M18,N18,O18\)/);
-  assert.match(cell(hourly, 'K6'), /F6&lt;Inputs!\$C\$68\),-F6\*L6/);
-  assert.match(hourly, /<c r="L8765" s="34"\/>/);
-  assert.match(cell(cf, 'G7'), /Value_Streams!\$L\$18\+Value_Streams!\$M\$18\+Value_Streams!\$N\$18/);
-  assert.match(cell(cf, 'L7'), /SUM\(C7:G7,J7:K7\)/);
-  assert.match(cell(out, 'C13'), /Value_Streams!L18/);
-});
-
 test('fill: a stand-alone battery sets the export flag, the export credit rates and the capacity months', () => {
   const account = chargingAccount({ modality: 'ftm', rateNo: 1, voltage: 'lt', batteryKw: 200 });
   const stack = buildStack({ modality: 'ftm', account, region: 'nyc', zone: 'J', demandIntervalMin: 15, taxPct: 2.5, supply: { mode: 'coned_mhp' },
@@ -148,18 +228,21 @@ test('fill: a stand-alone battery sets the export flag, the export credit rates 
   const zeroBill = { ...billFor(stack, load), fixed: 0, total: 0 };
   const withB = billFor(stack, imp), credits = valueStackCredits(stack.valueStack, imp, exp);
   const summary = summarize(stack, load, battery, zeroBill, withB, null, null, sol, { total: 0, streams: [] }, credits);
-  const d = proformaData({ stack, load, sol, summary, revenue: { total: 0, streams: [] }, battery, credits, baseline: zeroBill, withB }, { project: { rate: 'SC 9 Rate I LT' }, election: 'Keep the DRV' });
+  const d = proformaData({ stack, load, sol, summary, revenue: { total: 0, streams: [] }, battery, credits, baseline: zeroBill, withB },
+    { project: { rate: 'SC 9 Rate I LT' }, election: 'Keep the DRV', peakMatch: peakMatchFor({ stack, load, battery }) });
   const S = sheets(unzipSync(fillProforma(template, d)));
   assert.match(cell(S.wiz, fieldCell('project', 'exports')), /t="b"|<v>1<\/v>/);
   assert.equal(num(S.wiz, fieldCell('project', 'exports')), 1);
-  const drvHour = stack.valueStack.drv.intervals[0] / 4, r = 6 + drvHour;
-  assert.ok(Math.abs(num(S.hourly, `L${r}`) - (stack.valueStack.energyPrice[drvHour * 4] + stack.valueStack.drv.rate)) < 1e-12);
-  assert.ok(Math.abs(num(S.hourly, `D${r}`) - num(S.hourly, `E${r}`) + 50) < 1e-9, 'net grid demand is the export, negative');
+  const drvHour = stack.valueStack.drv.intervals[0] / 4;
+  assert.ok(Math.abs(num(S.wiz, hourCell('exportRate', drvHour)) - (stack.valueStack.energyPrice[drvHour * 4] + stack.valueStack.drv.rate)) < 1e-12);
+  assert.ok(Math.abs(num(S.wiz, hourCell('baseline', drvHour)) - num(S.wiz, hourCell('dispatch', drvHour)) + 50) < 1e-9, 'net grid demand is the export, negative');
   const v = (k) => Array.from({ length: 12 }, (_, i) => num(S.wiz, monthCell('vs', VS_COLS, k, i))).reduce((a, x) => a + x, 0);
   assert.ok(Math.abs(v('alt3') - credits.totals.alt3) < 1e-6);
   assert.ok(Math.abs(v('total') - credits.total) < 1e-6);
   const u = (k) => Array.from({ length: 12 }, (_, i) => num(S.wiz, monthCell('utility', UTILITY_COLS, k, i))).reduce((a, x) => a + x, 0);
   assert.ok(Math.abs(u('fixedChange') + withB.fixed * stack.taxFactor) < 1e-6, 'the new account\'s customer charge');
   assert.ok(Math.abs(u('billSav') + withB.total) < 1e-6, 'a stand-alone battery\'s bill is all cost');
-  assert.match(cell(S.vs, 'M6'), new RegExp(`${WIZ_SHEET}!\\$F\\$${LAYOUT.vs.first}`));
+  // No building load to shave: the efficiency is 100%, so the demand cost is not derated.
+  assert.equal(num(S.wiz, monthCell('peakMatch', PEAK_MATCH_COLS, 'efficiency', 6)), 1);
+  assert.match(text(S.wiz, fieldCell('peakMatchFields', 'basis')), /stand-alone/);
 });

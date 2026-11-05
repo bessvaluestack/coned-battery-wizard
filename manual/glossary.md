@@ -42,6 +42,8 @@
 
 **NYISO zones** — J is New York City; H (Millwood) and I (Dunwoodie) cover Westchester.
 
+**Peak matching efficiency** — The share of a month's demand savings a controller working from a day-ahead load forecast can expect to keep, against the dispatch's perfect foresight. See [How the model works](how-it-works.md#peak-matching).
+
 **RDM** — Revenue decoupling mechanism, a per-kWh delivery adjustment by service class.
 
 **Rider AC** — Con Edison's Dynamic Load Management programs: Term-DLM and Auto-DLM.

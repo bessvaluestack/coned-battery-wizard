@@ -11,6 +11,7 @@ import { CURVE_LEVELS, atLevel, curvePoint, capacityCurve } from '../js/curve.js
 import { proformaData, fillProforma } from '../js/proforma.js';
 import { runSnapshot } from '../js/project.js';
 import { LAYOUT, CURVE_COLS, colOf, WIZ_SHEET } from '../js/wizardsheet.js';
+import { sheetPaths } from '../js/xlsx.js';
 
 const read = (p) => JSON.parse(readFileSync(new URL('../data/' + p, import.meta.url), 'utf8'));
 const data = {
@@ -66,26 +67,27 @@ test('pro-forma: the capacity curve on Wizard_Import, and the cash flow follows 
   const withB = billFor(stack, sol.imp), revenue = programRevenue(stack, inp, sol), credits = valueStackCredits(stack.valueStack, sol.imp, sol.exp);
   const summary = summarize(stack, load, battery, baseline, withB, null, inp, sol, revenue, credits);
   const files = unzipSync(fillProforma(template, proformaData({ stack, load, sol, summary, revenue, battery, credits, baseline, withB }, { curve })));
-  const wiz = strFromU8(files['xl/worksheets/sheet7.xml']), cf = strFromU8(files['xl/worksheets/sheet5.xml']), inputs = strFromU8(files['xl/worksheets/sheet1.xml']);
+  const P = sheetPaths(files), wiz = strFromU8(files[P[WIZ_SHEET]]), cf = strFromU8(files[P.Project_Cash_Flow]), inputs = strFromU8(files[P.Inputs]);
   const C = LAYOUT.curve, at = (key, i) => `${colOf(CURVE_COLS, key)}${C.first + i}`;
   CURVE_LEVELS.forEach((level, i) => {
     assert.equal(num(wiz, at('level', i)), level);
     near(num(wiz, at('net', i)), curve.levels[i].net, 1e-6, 'net');
     near(num(wiz, at('vsShare', i)), curve.levels[i].vsShare, 1e-12, 'Value Stack share');
   });
-  near(num(wiz, `C${LAYOUT.curveMonthly.first + 6}`), curve.levels[0].monthlyNet[6], 1e-6, 'July at 100%');
-  // P: capacity left (C24 compounding, a C26 replacement restoring it); Q:T interpolate the shares; D:G take them.
+  // The curve by month is no longer written: its rows stay empty.
+  assert.doesNotMatch(wiz, /<row r="282"/);
+  // The model's cash flow runs across: row 108 is the capacity left (C24 compounding, a C26
+  // replacement restoring it), 109-112 interpolate the curve's shares at it, rows 23-26 take them.
   const range = (key) => `${WIZ_SHEET}!\\$${colOf(CURVE_COLS, key)}\\$${C.first}:\\$${colOf(CURVE_COLS, key)}\\$${C.last}`;
-  assert.match(cell(cf, 'P7'), /N\(Inputs!\$C\$24\)/);
-  assert.match(cell(cf, 'P7'), /N\(Inputs!\$C\$26\)/);
-  for (const [c, key] of [['Q', 'demandShare'], ['R', 'energyShare'], ['S', 'programsShare'], ['T', 'vsShare']]) {
-    assert.match(cell(cf, `${c}7`), new RegExp(`MATCH\\(MAX\\(MIN\\(${range('level')}\\)`), c);
-    assert.match(cell(cf, `${c}7`), new RegExp(`INDEX\\(${range(key)},`), c);
+  assert.match(cell(cf, 'G108'), /N\(Inputs!\$C\$24\)/);
+  assert.match(cell(cf, 'G108'), /N\(Inputs!\$C\$26\)/);
+  for (const [r, key] of [[109, 'demandShare'], [110, 'energyShare'], [111, 'programsShare'], [112, 'vsShare']]) {
+    assert.match(cell(cf, `G${r}`), new RegExp(`MATCH\\(MAX\\(MIN\\(${range('level')}\\)`), key);
+    assert.match(cell(cf, `G${r}`), new RegExp(`INDEX\\(${range(key)},`), key);
   }
-  assert.match(cell(cf, 'D7'), /\^\(\$B7-Inputs!\$C\$69\)\*\$Q7/);
-  assert.match(cell(cf, 'E7'), /\*\$R7/);
-  assert.match(cell(cf, 'F7'), /Value_Streams!\$K\$18\*\$S7/);
-  assert.match(cell(cf, 'G7'), /\(Value_Streams!\$L\$18\+Value_Streams!\$M\$18\+Value_Streams!\$N\$18\)\*\$T7/);
-  assert.match(cell(cf, 'G31'), /\*\$T31/);
+  assert.match(cell(cf, 'G23'), /Value_Streams!\$I\$18\*.*\*G\$109/);
+  assert.match(cell(cf, 'G24'), /\*G\$110/);
+  assert.match(cell(cf, 'G25'), /Value_Streams!\$M\$18\*G\$111/);
+  assert.match(cell(cf, 'G26'), /\*G\$112/);
   assert.match(cell(inputs, 'E24'), /capacity curve/);
 });

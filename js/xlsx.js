@@ -60,3 +60,16 @@ export function setCellsBulk(xml, values) {
   for (const ref of Object.keys(values)) if (!seen.has(ref)) throw new Error(`cell ${ref} not found`);
   return out;
 }
+
+// Each sheet's part in an unzipped workbook, by sheet name: { Inputs: 'xl/worksheets/sheet1.xml', ... }.
+export function sheetPaths(files) {
+  const text = (p) => new TextDecoder().decode(files[p]);
+  const rels = Object.fromEntries([...text('xl/_rels/workbook.xml.rels').matchAll(/<Relationship\b[^>]*>/g)].map(([r]) => [(r.match(/\bId="([^"]+)"/) || [])[1], (r.match(/\bTarget="([^"]+)"/) || [])[1]]));
+  const out = {};
+  for (const [s] of text('xl/workbook.xml').matchAll(/<sheet\b[^>]*>/g)) {
+    const name = (s.match(/\bname="([^"]+)"/) || [])[1], id = (s.match(/\br:id="([^"]+)"/) || [])[1];
+    const target = rels[id];
+    if (name && target) out[name.replace(/&amp;/g, '&')] = target.startsWith('/') ? target.slice(1) : `xl/${target}`;
+  }
+  return out;
+}

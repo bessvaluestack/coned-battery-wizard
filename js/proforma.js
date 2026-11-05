@@ -1,26 +1,60 @@
 // The owner pro-forma (templates/proforma.xlsx, built by
-// scripts/make_proforma_template.mjs) filled from a run. The wizard writes
-// two places only: the Wizard_Import sheet (project, battery, the monthly
-// bill and its determinants, program revenue by program, Value Stack
-// credits, the capacity curve, the saved version and its links; see
-// js/wizardsheet.js), which the model's battery, savings, rate and
-// degradation cells link to, and the 8,760 hourly rows on
-// Hourly_Operations. The installed cost, when one was entered, goes on the
-// capital lines. O&M, finance and resiliency stay as the template has them
-// for the user to set.
+// scripts/make_proforma_template.mjs from the owner's financial model) filled
+// from a run. The wizard writes the Wizard_Import sheet only (project,
+// battery, the monthly bill and its determinants, program revenue by program,
+// Value Stack credits, the capacity curve, the saved version and its links,
+// the peak matching efficiency, the tariff calendar and the year hour by
+// hour; see js/wizardsheet.js), which the model's battery, savings, rate,
+// hourly and degradation cells link to. The installed cost, when one was
+// entered, goes on the model's capital lines. O&M, finance and resiliency
+// stay as the template has them for the user to set.
 import { unzipSync, zipSync, strFromU8, strToU8 } from '../vendor/fflate/fflate.mjs';
-import { setCells, setCellsBulk, fillRows } from './xlsx.js';
+import { setCells, setCellsBulk, sheetPaths } from './xlsx.js';
 import { STEPS_PER_HOUR } from './timeidx.js';
 import { monthlyBillChange, programsByMonth } from './model.js';
-import { pctOf } from './curve.js';
-import { sheetCells, savedBlockCells, DEMAND_ROWS, MONTHS } from './wizardsheet.js';
+import { sheetCells, savedBlockCells, DEMAND_ROWS, MONTHS, WIZ_SHEET } from './wizardsheet.js';
 
 export const TEMPLATE_URL = new URL('../templates/proforma.xlsx', import.meta.url);
 export const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
-const SHEET = { inputs: 1, hourly: 3, wizard: 7 };
-const FIRST_ROW = 6; // hour 1 is on row 6 of Hourly_Operations
+// The model's capital lines (Inputs), first to last.
+export const CAPITAL_CELLS = ['C34', 'C35', 'C36', 'C37', 'C38', 'C39', 'C40'];
+const CAPITAL_NOTE = 'E34';
 const PERIOD = { month: 'monthly', day: 'daily (as-used)', year: 'contract demand' };
+const SUMMER = [6, 7, 8, 9]; // Con Edison's summer rates: June to September
+
+// The account's seasons and time-of-day periods, in the shape of the model's
+// Utility_Rates: a season per month, and per hour starting a period for
+// summer and winter weekdays and weekends. An hour inside every time-of-day
+// window of the season (demand charges and any energy windows) is Peak,
+// inside some Shoulder, outside them all Off-peak.
+export function tariffCalendar(tariff) {
+  const charges = (tariff.demand && tariff.demand.charges) || [];
+  const named = charges.find((c) => /^summer/.test(c.name || '') && c.months);
+  const summer = named ? named.months : SUMMER;
+  const season = MONTHS.map((month, m) => ({ month, season: summer.includes(m + 1) ? 'Summer' : 'Winter' }));
+  const windows = new Map();
+  const add = (w, months) => { if (w.hours) windows.set(`${(months || []).join(',')}|${w.days || 'all'}|${w.hours.join('-')}`, { months: months || MONTHS.map((_, i) => i + 1), days: w.days || 'all', hours: w.hours }); };
+  for (const s of (tariff.energy && tariff.energy.seasons) || []) for (const w of s.tou || []) add(w, s.months);
+  for (const c of charges) add(c, c.months);
+  const inHours = ([a, b], h) => (a <= b ? h >= a && h < b : h >= a || h < b);
+  const onDay = (days, weekday) => days === 'all' || (weekday ? days === 'weekdays' : days === 'weekends');
+  const month = { summer: summer.includes(7) ? 7 : summer[0], winter: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].find((m) => !summer.includes(m)) };
+  const periods = (which, weekday) => {
+    const ws = [...windows.values()].filter((w) => w.months.includes(month[which]) && onDay(w.days, weekday));
+    const n = Array.from({ length: 24 }, (_, h) => ws.filter((w) => inHours(w.hours, h)).length);
+    const top = Math.max(0, ...n);
+    return n.map((k) => (k === 0 ? 'Off-peak' : k === top ? 'Peak' : 'Shoulder'));
+  };
+  const sw = periods('summer', true), se = periods('summer', false), ww = periods('winter', true), we = periods('winter', false);
+  const tou = Array.from({ length: 24 }, (_, h) => ({ hour: h, summerWeekday: sw[h], summerWeekend: se[h], winterWeekday: ww[h], winterWeekend: we[h] }));
+  return { season, tou };
+}
+
+const NO_PEAK_MATCH = {
+  ftm: 'Nothing to derate: a stand-alone battery has no building load to shave (100%)',
+  dr_only: 'Nothing to derate: demand response only, the battery discharges in program events alone (100%)',
+};
 
 /**
  * Everything the workbook needs from a run.
@@ -29,12 +63,12 @@ const PERIOD = { month: 'monthly', day: 'daily (as-used)', year: 'contract deman
  * @param opts { project: { id, name, config, run, version, ratesDate, modality, rate, area, supply, dr, load },
  *               programMonths: { csrp: [5..9], ... }, monthlyBills: [12] | null, installedCost ($), election,
  *               curve (capacityCurve) | null, saved: { rev, link, projectLink, savedAt, savedBy } | null,
- *               hosted (the hosted edition: it keeps the saved-analysis block) }
+ *               peakMatch (peakMatchFor) | null, hosted (the hosted edition: it keeps the saved-analysis block) }
  */
 export function proformaData(run, opts = {}) {
   const { stack, load, sol, summary, revenue, battery, credits = null, baseline: B, withB: W } = run;
   const baseStack = run.baseStack || stack;
-  const { programMonths = {}, monthlyBills = null, installedCost = 0, curve = null, saved = null, hosted = false } = opts;
+  const { programMonths = {}, monthlyBills = null, installedCost = 0, curve = null, saved = null, peakMatch = null, hosted = false } = opts;
   const idx = stack.idx, tf = stack.taxFactor, hours = idx.T / STEPS_PER_HOUR;
   const vs = stack.valueStack;
   const inDrv = new Uint8Array(hours);
@@ -83,6 +117,21 @@ export function proformaData(run, opts = {}) {
   const { programs, terms } = programsByMonth(revenue, programMonths);
 
   const vsRows = credits ? Array.from({ length: 12 }, (_, m) => ({ exportKwh: kwhExport[m], energy: credits.energy[m], drv: credits.drv[m], alt3: credits.alt3[m], lsrv: credits.lsrv[m], total: credits.energy[m] + credits.drv[m] + credits.alt3[m] + credits.lsrv[m] })) : null;
+
+  // Peak matching: each month's efficiency applied to its demand savings.
+  // Without one (none computed, a stand-alone battery, demand response only)
+  // every month is 100%, so the model's derate leaves the savings whole.
+  const pm = peakMatch && peakMatch.applies ? peakMatch : null;
+  const peakMatchRows = utility.map((u, m) => {
+    const e = pm ? pm.months[m].efficiency : 1, cut = u.peakBase - u.peakAfter;
+    return { efficiency: e, shaveDays: pm ? pm.months[m].shaveDays : undefined, cutPerfect: cut, cutExpected: cut * e, demandSav: u.demandSav, demandExpected: u.demandSav * e };
+  });
+  const peakMatchFields = {
+    forecastError: pm ? pm.forecastError : undefined,
+    draws: pm ? pm.draws : undefined,
+    basis: pm ? 'Demand savings, month by month (Value_Streams C links here)' : NO_PEAK_MATCH[peakMatch && peakMatch.reason] || 'Not computed for this run (100%)',
+  };
+
   const sum = (a, k) => a.reduce((x, r) => x + (r[k] || 0), 0);
   const wizard = {
     project: { ...(opts.project || {}), utility: 'Con Edison', exports: !!vs, interval: stack.demandIntervalMin, tax: Math.round((tf - 1) * 1e6) / 1e6 },
@@ -95,24 +144,28 @@ export function proformaData(run, opts = {}) {
     demand: demandRows, energy,
     curve: curve ? curve.levels : null,
     saved,
-    curveMonthly: curve ? MONTHS.map((_, m) => Object.fromEntries(curve.levels.map((p) => [`net${pctOf(p.level)}`, p.monthlyNet[m]]))) : null,
+    peakMatch: peakMatchRows, peakMatchFields,
+    ...tariffCalendar(stack.tariff),
+    hourly: { baseline, dispatch, rate, exportRate },
   };
 
   // The installed cost is all-in: it goes on the first capital line, the rest are zero.
   const inputs = {};
   if (installedCost > 0) {
-    Object.assign(inputs, { C32: installedCost, C33: 0, C34: 0, C35: 0, C36: 0, C37: 0, C38: 0 });
-    inputs.E32 = 'All-in installed cost from the Con Edison Battery Wizard; the lines below are 0. Split it across them if you have a breakdown.';
+    CAPITAL_CELLS.forEach((c, i) => { inputs[c] = i ? 0 : installedCost; });
+    inputs[CAPITAL_NOTE] = 'All-in installed cost from the Con Edison Battery Wizard; the lines below are 0. Split it across them if you have a breakdown.';
   }
-  return { hourly: { baseline, dispatch, rate, exportRate }, inputs, wizard, hosted };
+  return { inputs, wizard, hosted };
 }
 
 // The Wizard_Import values as { cell: value }: every value cell of the layout,
-// blank where the run has nothing (labels and totals stay as the template has them).
+// blank where the run has nothing (labels, totals and the fixed hour columns
+// stay as the template has them).
+const FIXED = new Set(['title', 'note', 'head', 'colhead', 'label', 'hourN', 'hourT']);
 export function wizardValues(wizard) {
   const out = {};
   for (const [cell, [value, fmt]] of Object.entries(sheetCells(wizard))) {
-    if (['title', 'note', 'head', 'colhead', 'label'].includes(fmt) || (value && value.f)) continue;
+    if (FIXED.has(fmt) || (value && value.f)) continue;
     out[cell] = value === undefined ? null : value;
   }
   return out;
@@ -121,16 +174,11 @@ export function wizardValues(wizard) {
 // Fill the template bytes with proformaData() and return the new workbook.
 export function fillProforma(template, d) {
   const files = unzipSync(template);
-  const edit = (n, fn) => { const p = `xl/worksheets/sheet${n}.xml`; files[p] = strToU8(fn(strFromU8(files[p]))); };
-  const { baseline, dispatch, rate, exportRate } = d.hourly;
-  if (Object.keys(d.inputs).length) edit(SHEET.inputs, (x) => setCells(x, d.inputs));
-  edit(SHEET.hourly, (x) => fillRows(x, (n) => {
-    const h = n - FIRST_ROW;
-    if (h < 0 || h >= baseline.length) return null;
-    return exportRate ? { D: baseline[h], E: dispatch[h], H: rate[h], L: exportRate[h] } : { D: baseline[h], E: dispatch[h], H: rate[h] };
-  }));
+  const path = sheetPaths(files);
+  const edit = (name, fn) => { const p = path[name]; if (!p) throw new Error(`the pro-forma has no ${name} sheet`); files[p] = strToU8(fn(strFromU8(files[p]))); };
+  if (Object.keys(d.inputs).length) edit('Inputs', (x) => setCells(x, d.inputs));
   const values = wizardValues(d.wizard);
   if (!d.hosted) for (const c of savedBlockCells()) values[c] = null;
-  edit(SHEET.wizard, (x) => setCellsBulk(x, values));
+  edit(WIZ_SHEET, (x) => setCellsBulk(x, values));
   return zipSync(files, { level: 6 });
 }

@@ -5,6 +5,13 @@ The wizard's version is shown in the pro-forma (Wizard_Import, Project block).
 Every saved run records it too: a run saved by an earlier version opens with its inputs and a note to run it again.
 :::
 
+## 0.7 — November 2026
+
+- **The owner's financial model, v1.0**, is the pro-forma: tax benefits, bridge and term financing, and returns with and without resiliency. The wizard writes only Wizard_Import; the model's hourly data, seasons, time-of-day schedule and peak matching link to it.
+- **Peak matching efficiency**: how much of each month's demand savings a controller working from a day-ahead load forecast can expect to keep, from a forecast error set on the Battery step (5% by default). Shown under the monthly peaks; the pro-forma applies it to demand savings.
+- Each month's own demand savings in the model's Value_Streams (v1.0 repeated January's and February's).
+- The capacity curve by month is no longer written to Wizard_Import (nothing used it); the curve itself stays and still drives degradation.
+
 ## 0.6 — October 2026
 
 - **Demand response only** behind the meter (Riders step, *Battery use*): the battery discharges only in program events, and the results compare it with optimising the bill as well.

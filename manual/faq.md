@@ -56,7 +56,11 @@ General Rule 20 bills customers with on-site generation on standby rates. Storag
 
 ### The returns are empty
 
-The returns need the capital costs (Inputs C32:C38), the analysis period (C42) and the discount rate (C43). **Model status** in Inputs C65 says what is missing.
+The returns need the capital costs (Inputs C34:C40), the analysis period (C44) and the discount rate (C45). **Model status** in Inputs C104 says what is missing. If they show `#NAME?` instead, the workbook is open in an application without Excel's dynamic arrays: the financing schedule needs Microsoft 365 Excel.
+
+### Why are the demand savings in the workbook lower than on the results page?
+
+The results page shows the dispatch with perfect foresight. The workbook multiplies each month's demand savings by its peak matching efficiency (Value_Streams C), what a controller working from a day-ahead forecast can expect to keep. The results page shows the same figures under the monthly peaks. See [How the model works](how-it-works.md#peak-matching).
 
 ### Can I change the battery in the workbook?
 

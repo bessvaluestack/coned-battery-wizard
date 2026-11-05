@@ -5,9 +5,10 @@
 // writes values here (and the 8,760 hourly rows on Hourly_Operations).
 //
 // The layout is the interface between the two tools: add rows at the end of
-// a block or new blocks below, never move an existing cell.
+// a block or new blocks below, never move an existing cell. A block that is
+// no longer written keeps its rows, empty.
 
-import { CURVE_LEVELS, pctOf } from './curve.js';
+import { CURVE_LEVELS } from './curve.js';
 
 export const WIZ_SHEET = 'Wizard_Import';
 export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -126,7 +127,6 @@ export const CURVE_COLS = [
   ['vsShare', 'Share of full: Value Stack and account change', 'pct'],
   ['cycles', 'Equivalent full cycles', 'num1'],
 ];
-export const CURVE_MONTH_COLS = [['month', 'Month', 'text'], ...CURVE_LEVELS.map((f) => [`net${pctOf(f)}`, `Net benefit at ${pctOf(f)}% ($)`, 'money'])];
 
 // Where the run is kept on the hosted wizard: the version holding it and links
 // back to it. Blank for a run that was not saved there.
@@ -138,6 +138,35 @@ export const SAVED_FIELDS = [
   ['savedAt', 'Saved (date and time)', 'text', 'UTC'],
   ['savedBy', 'Saved by', 'text', 'The name typed in the wizard'],
 ];
+
+// Peak matching efficiency (js/peakmatch.js): the share of each month's
+// perfect-foresight demand savings a controller working from a day-ahead load
+// forecast can expect to keep. The model's derate links to the efficiency.
+export const PEAK_MATCH_COLS = [
+  ['month', 'Month', 'text'],
+  ['efficiency', 'Peak matching efficiency', 'pct'],
+  ['shaveDays', 'Days the battery has to shave', 'int'],
+  ['cutPerfect', 'Billing peak cut, perfect foresight (kW)', 'num1'],
+  ['cutExpected', 'Billing peak cut expected (kW)', 'num1'],
+  ['demandSav', 'Demand savings, perfect foresight ($)', 'money'],
+  ['demandExpected', 'Demand savings expected ($)', 'money'],
+];
+export const PEAK_MATCH_FIELDS = [
+  ['forecastError', 'Day-ahead load forecast error', 'pct', 'One standard deviation of a day\'s load; set in the wizard (Battery step)'],
+  ['draws', 'Forecast years simulated', 'int', 'Seeded, so the same inputs give the same result'],
+  ['basis', 'Applies to', 'text'],
+];
+
+// The account's seasons and time-of-day periods, in the shape of the model's
+// Utility_Rates season column and TOU schedule, which link here.
+export const SEASON_COLS = [['month', 'Month', 'text'], ['season', 'Season', 'text']];
+export const TOU_COLS = [['hour', 'Hour starting', 'int'], ['summerWeekday', 'Summer weekday', 'text'], ['summerWeekend', 'Summer weekend', 'text'],
+  ['winterWeekday', 'Winter weekday', 'text'], ['winterWeekend', 'Winter weekend', 'text']];
+
+// The year hour by hour; the model's Hourly_Operations D, E, H and L link here.
+export const HOURS = 8760;
+export const HOURLY_COLS = [['hour', 'Hour of the year', 'hourN'], ['start', 'Starting', 'hourT'], ['baseline', 'Baseline (kW)', 'num1'],
+  ['dispatch', 'Battery dispatch (kW)', 'num1'], ['rate', 'Energy rate ($/kWh)', 'rate4'], ['exportRate', 'Export credit rate ($/kWh)', 'rate4']];
 
 const col = (i) => String.fromCharCode(66 + i); // B, C, ...
 
@@ -160,14 +189,32 @@ function layout() {
   L.hourly = r;
   r += 2;
   L.curve = table(CURVE_LEVELS.length);
-  L.curveMonthly = table(12, 1);
+  r += 16; // the capacity curve by month, written until 0.6.0 (rows 280 to 295)
   L.curveNote = r;
   r += 2;
   L.saved = block(SAVED_FIELDS);
-  L.lastRow = L.saved.head + SAVED_FIELDS.length;
+  L.peakMatch = table(12, 1);
+  L.peakMatchFields = block(PEAK_MATCH_FIELDS);
+  L.peakMatchNote = r;
+  r += 2;
+  L.season = table(12);
+  L.tou = table(24);
+  L.touNote = r;
+  r += 2;
+  L.hourlyData = table(HOURS);
+  L.lastRow = L.hourlyData.last;
   return L;
 }
 export const LAYOUT = layout();
+
+// The hour of the year as the model's calendar has it (2027, no daylight saving).
+const pad = (n) => String(n).padStart(2, '0');
+const DAYS_IN = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+export function hourStart(h) {
+  let d = Math.floor(h / 24), m = 0;
+  while (d >= DAYS_IN[m]) d -= DAYS_IN[m++];
+  return `2027-${pad(m + 1)}-${pad(d + 1)} ${pad(h % 24)}:00`;
+}
 
 // Every cell of the saved-analysis block (title, labels, values, notes): the
 // GitHub Pages edition keeps no versions, so its pro-forma leaves them blank.
@@ -183,14 +230,16 @@ export const ref = (cell) => `${WIZ_SHEET}!$${cell.replace(/(\d+)/, '$$$1')}`;
 /**
  * The sheet's rows as { cell: [value, format] }, from `values` (null: the
  * empty template). Formats: title, note, head (block header), colhead,
- * label, text, bool, int, num1, money, rate4, pct.
+ * label, text, bool, int, num1, money, rate4, pct; hourN and hourT are the
+ * hourly block's fixed hour number and start (an int and a text cell the
+ * download does not write).
  */
 export function sheetCells(values = null) {
   const v = values || {};
   const out = {};
   const put = (cell, value, fmt) => { out[cell] = [value, fmt]; };
   put(`B${LAYOUT.title}`, 'WIZARD IMPORT | FROM THE CON EDISON BATTERY WIZARD', 'title');
-  put(`B${LAYOUT.note}`, 'Written by the wizard on every download; the model links here. Protected: change the project in the wizard and download again. All $ include taxes and surcharges; Year 1, with the capacity curve at the end for later years.', 'note');
+  put(`B${LAYOUT.note}`, 'Written by the wizard on every download; the model links here. Protected: change the project in the wizard and download again. All $ include taxes and surcharges; Year 1, with the capacity curve for later years, then the peak matching efficiency, the tariff calendar and the year hour by hour.', 'note');
   const block = (key, title, fields, data) => {
     const b = LAYOUT[key];
     data = data || {};
@@ -231,10 +280,26 @@ export function sheetCells(values = null) {
   block('vsFields', 'VALUE STACK TERMS', VS_FIELDS, v.vsFields);
   table('demand', 'DEMAND CHARGES BY MONTH (EACH DETERMINANT AND RATE)', DEMAND_COLS, v.demand, DEMAND_ROWS);
   table('energy', 'ENERGY BY COMPONENT, YEAR 1', ENERGY_COLS, v.energy, ENERGY_ROWS);
-  put(`B${LAYOUT.hourly}`, 'Hourly (8,760 rows): Hourly_Operations D baseline kW, E battery dispatch kW (net of charging), H energy rate $/kWh, L export credit $/kWh.', 'note');
+  put(`B${LAYOUT.hourly}`, `Hourly (8,760 rows): the last block on this sheet, rows ${LAYOUT.hourlyData.first} to ${LAYOUT.hourlyData.last}. Hourly_Operations D baseline kW, E battery dispatch kW (net of charging), H energy rate $/kWh and L export credit $/kWh link there.`, 'note');
   table('curve', 'CAPACITY CURVE: YEAR 1 AGAIN WITH LESS USABLE ENERGY (DEGRADATION, REPLACEMENT, AUGMENTATION)', CURVE_COLS, v.curve, CURVE_LEVELS.length);
-  table('curveMonthly', 'CAPACITY CURVE BY MONTH: NET BENEFIT ($)', CURVE_MONTH_COLS, v.curveMonthly, 12, sumKeys(CURVE_MONTH_COLS));
   block('saved', 'SAVED ANALYSIS ON THE HOSTED WIZARD (BLANK WHEN IT WAS NOT SAVED THERE)', SAVED_FIELDS, v.saved);
+  const P = LAYOUT.peakMatch, eff = colOf(PEAK_MATCH_COLS, 'efficiency'), sav = colOf(PEAK_MATCH_COLS, 'demandSav'), exp = colOf(PEAK_MATCH_COLS, 'demandExpected');
+  table('peakMatch', 'PEAK MATCHING EFFICIENCY: DEMAND SAVINGS WITHOUT PERFECT FORESIGHT', PEAK_MATCH_COLS, v.peakMatch, 12, sumKeys(PEAK_MATCH_COLS));
+  put(`${eff}${P.total}`, { f: `IF(N(${sav}${P.total})=0,"",${exp}${P.total}/${sav}${P.total})` }, 'pct');
+  block('peakMatchFields', 'PEAK MATCHING: TERMS', PEAK_MATCH_FIELDS, v.peakMatchFields);
+  put(`B${LAYOUT.peakMatchNote}`, 'The dispatch above knows the whole year\'s load in advance. A controller works from a day-ahead forecast, and a month\'s demand charge is set by its single worst interval. Each day the battery has to shave is a chance for a forecast error to let the peak through: too high a forecast and it stops short, too low and it shaves too deep early and runs short. The efficiency is the expected peak cut over the perfect-foresight cut, from many simulated forecast years; it falls with the number of days at the battery\'s limit. Expected savings = efficiency x perfect-foresight savings.', 'note');
+  table('season', 'TARIFF CALENDAR: SEASON BY MONTH', SEASON_COLS, v.season, 12);
+  table('tou', 'TIME-OF-DAY PERIODS BY HOUR STARTING (THE ACCOUNT\'S DEMAND AND SUPPLY WINDOWS)', TOU_COLS, v.tou, 24);
+  put(`B${LAYOUT.touNote}`, 'Peak: inside every time-of-day window of the season; Shoulder: inside some; Off-peak: outside them all. A rate with no time-of-day windows (Rate I) has one period, shown as Off-peak. Weekdays include holidays, as the windows do. The hourly energy rate below already prices every hour.', 'note');
+  const H = LAYOUT.hourlyData, hv = v.hourly || null;
+  put(`B${H.head}`, 'THE YEAR HOUR BY HOUR (HOURLY AVERAGES OF THE 15-MINUTE RUN)', 'head');
+  HOURLY_COLS.forEach(([, label], i) => put(`${col(i)}${H.cols}`, label, 'colhead'));
+  for (let h = 0; h < HOURS; h++) {
+    const r = H.first + h;
+    put(`B${r}`, h + 1, 'hourN');
+    put(`C${r}`, hourStart(h), 'hourT');
+    HOURLY_COLS.slice(2).forEach(([k, , fmt], i) => put(`${col(2 + i)}${r}`, hv && hv[k] ? hv[k][h] : null, fmt));
+  }
   const link = fieldCell('saved', 'link');
   put(fieldCell('saved', 'open'), { f: `IF(${link}="","",HYPERLINK(${link},"Open this version in the wizard"))` }, 'text');
   put(`B${LAYOUT.curveNote}`, 'Each level is the whole year optimised again (bill, programs and Value Stack together) with that share of the usable energy; power, round-trip efficiency and the annual cycle limit (on nameplate kWh) stay as in the BATTERY block. A later year\'s stream is its Year 1 value times its share at that year\'s capacity, interpolated between levels. Blank when the run had no curve.', 'note');
