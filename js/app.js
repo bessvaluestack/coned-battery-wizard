@@ -11,6 +11,7 @@ import { barChart, lineChart } from './charts.js';
 import { monthlyEnergyKwh, monthlyPeakKw } from './tariff.js';
 import { TEMPLATE_URL, XLSX_TYPE, proformaData, fillProforma } from './proforma.js';
 import { peakMatchFor, FORECAST_ERROR } from './peakmatch.js';
+import { perKwh, perKwhSpan, perKwhColumn } from './units.js';
 import * as edition from './edition.js';
 import { APP_VERSION, newProject, fingerprint, fileSlug, projectFile, readProjectFile, readProjectDoc, runSnapshot, solFromSnapshot, projectHash, readProjectHash } from './project.js';
 import { STORE } from './store.js';
@@ -374,7 +375,7 @@ function rateCard(stack) {
   const unit = (c) => (c.period === 'day' ? '$/kW-day' : '$/kW-mo');
   const what = (c) => (c.period === 'year' ? 'contract demand' : c.period === 'day' ? 'daily as-used demand' : 'monthly demand');
   const demandRows = stack.ta.demandCharges.map((c) => `<tr><td>${esc(c.name.replace(/_/g, ' '))} (${what(c)})</td><td>${c.months.length === 12 ? 'all year' : c.months.map((m) => MONTH_NAMES[m - 1]).join(', ')}</td><td>${c.days === 'all' ? 'all days' : c.days}${c.hours ? `, ${c.hours[0]}:00 to ${c.hours[1]}:00` : ', all hours'}</td><td class="num">${c.rate.toFixed(c.period === 'day' ? 4 : 2)} ${unit(c)}</td></tr>`).join('');
-  const energyRows = t.energy.seasons.map((se) => se.tou.map((w) => `<tr><td>Delivery energy${t.energy.seasons.length > 1 ? ` (${esc(se.name.replace(/_/g, ' '))})` : ''}</td><td>${se.months.length === 12 ? 'all year' : se.months.map((m) => MONTH_NAMES[m - 1]).join(', ')}</td><td>${w.hours ? `${w.hours[0]}:00 to ${w.hours[1]}:00` : 'all hours'}</td><td class="num">${(+w.rate).toFixed(4)} $/kWh</td></tr>`).join('')).join('');
+  const energyRows = t.energy.seasons.map((se) => se.tou.map((w) => `<tr><td>Delivery energy${t.energy.seasons.length > 1 ? ` (${esc(se.name.replace(/_/g, ' '))})` : ''}</td><td>${se.months.length === 12 ? 'all year' : se.months.map((m) => MONTH_NAMES[m - 1]).join(', ')}</td><td>${w.hours ? `${w.hours[0]}:00 to ${w.hours[1]}:00` : 'all hours'}</td><td class="num">${perKwh(+w.rate)}</td></tr>`).join('')).join('');
   return `
     <h3>Rate card: ${esc(t.name)}</h3>
     <p class="note">${esc(t.applicability || '').slice(0, 420)}${(t.applicability || '').length > 420 ? '...' : ''}</p>
@@ -395,6 +396,8 @@ async function stepRate() {
   const kwhRows = [['NYSERDA SBC surcharge', k.sbc_total_nyserda.value, k.sbc_total_nyserda.statement.effective], ['Monthly Adjustment Clause (MAC)', k.mac.value, k.mac.statement.effective], ['MAC adjustment factor', k.mac_adjustment_factor.value, k.mac_adjustment_factor.statement.effective],
     [`Revenue decoupling (RDM), SC ${acct.sc}`, bc.kwh.rdm, k.rdm_sc8.statement.effective], ...(acct.standby ? [] : [[`Delivery revenue surcharge (SDR), SC ${acct.sc}`, bc.kwh.sdr, k.sdr_sc8_rates_i_ii_iii.statement.effective]]),
     ...(bc.kwh.sbc_company_ee ? [['Company-administered EE / BE charge', bc.kwh.sbc_company_ee, k.sbc_total_nyserda.statement.effective]] : [])];
+  const kwhCol = perKwhColumn([...kwhRows.map(([, v]) => +v), stack.kwhAdjDefault]);
+  const kwhOverride = !(state.adjustments.kwh === null || state.adjustments.kwh === undefined || state.adjustments.kwh === '');
   const sbc = acct.sc === 2 ? null : acct.standby ? `${bc.kw.standby.contract_demand_kw.toFixed(2)} $/kW-month on the contract demand (SBC and SDR, standby)` : acct.rateNo === 1 ? `${bc.kw.rate1.monthly_max_demand_kw} $/kW-month on the monthly maximum (Rate I)` : `${bc.kw.tod.tod_demand_kw} $/kW-month on the weekday 8-22 demand (time-of-day rates)`;
   const site = `
       ${field('Service voltage', select('voltage', state.voltage, [['lt', 'Low tension (secondary)'], ['ht', 'High tension (primary)']]))}
@@ -431,12 +434,12 @@ async function stepRate() {
     <div class="grid2">${site}</div>
     <details><summary>Delivery adjustments and surcharges (advanced)</summary>
       <p class="note">Per-kWh statements in force on ${esc(st.in_force_on)}; the demand-based SBC surcharge rides the same determinant as the delivery demand charge. ${edition.UNLISTED_STATEMENTS}</p>
-      <div class="tablewrap"><table><thead><tr><th>Statement</th><th>Effective</th><th class="num">$/kWh</th></tr></thead><tbody>
-        ${kwhRows.map(([n, v, eff]) => `<tr><td>${n}</td><td>${esc(eff || '')}</td><td class="num">${(+v).toFixed(6)}</td></tr>`).join('')}
-        <tr class="total"><td>Sum (default below)</td><td></td><td class="num">${stack.kwhAdjDefault.toFixed(6)}</td></tr>
+      <div class="tablewrap"><table><thead><tr><th>Statement</th><th>Effective</th><th class="num">${kwhCol.unit}</th></tr></thead><tbody>
+        ${kwhRows.map(([n, v, eff]) => `<tr><td>${n}</td><td>${esc(eff || '')}</td><td class="num">${kwhCol.cell(+v)}</td></tr>`).join('')}
+        <tr class="total"><td>Sum (default below)</td><td></td><td class="num">${kwhCol.cell(stack.kwhAdjDefault)}</td></tr>
       </tbody></table></div>
       <div class="grid2">
-        ${field('Delivery $/kWh adjustments (override)', numInput('adjustments.kwh', state.adjustments.kwh, { step: 0.0001, unit: '$/kWh', nullable: true, placeholder: stack.kwhAdjDefault.toFixed(6) }), 'Leave blank to use the sum above.')}
+        ${field('Delivery $/kWh adjustments (override)', numInput('adjustments.kwh', state.adjustments.kwh, { step: 0.0001, unit: '$/kWh', nullable: true, placeholder: stack.kwhAdjDefault.toFixed(6) }), `In dollars per kWh. Leave blank to use the sum above, ${perKwh(stack.kwhAdjDefault)} (${stack.kwhAdjDefault.toFixed(6)} $/kWh).${kwhOverride ? ` <b>Set to ${perKwh(+state.adjustments.kwh)}.</b>` : ''}`)}
         ${field('Other $/kW-month on the monthly maximum', numInput('adjustments.extraDemand', state.adjustments.extraDemand, { step: 0.01, unit: '$/kW-mo' }), 'Anything else billed on the monthly peak.')}
       </div>
       ${sbc ? `<label class="check"><input type="checkbox" data-path="adjustments.sbcDemand" ${state.adjustments.sbcDemand !== false ? 'checked' : ''}><span>Include the SBC demand surcharge <span class="d">${sbc}</span></span></label>` : ''}
@@ -458,21 +461,22 @@ async function stepSupply() {
   const monthName = (d) => `${MONTH_NAMES[+d.slice(5, 7) - 1]} ${d.slice(0, 4)}`;
   const span = (a, d) => (Math.min(...a) === Math.max(...a) ? a[0].toFixed(d) : `${Math.min(...a).toFixed(d)} to ${Math.max(...a).toFixed(d)}`);
   const byMonthNote = `Blank = each month's own statement (${monthName(first)} to ${monthName(last)}); a value here applies all year.`;
-  const monthTable = () => `<details><summary>Statement values by month</summary><div class="tablewrap"><table><thead><tr><th>Month</th><th class="num">Capacity $/kW-mo</th><th class="num">MFC $/kWh</th>${sup.mode === 'coned_msc' ? '<th class="num">MSC adjustment $/kWh</th><th class="num">Tax reimbursement $/kWh</th>' : ''}</tr></thead><tbody>
-    ${MONTH_NAMES.map((n, m) => `<tr><td>${n}</td><td class="num">${sup.capacityByMonth[m].toFixed(2)}</td><td class="num">${sup.mfcByMonth[m].toFixed(6)}</td>${sup.mode === 'coned_msc' ? `<td class="num">${sup.reconciliationByMonth[m].toFixed(6)}</td><td class="num">${sup.taxReimbursementByMonth[m].toFixed(6)}</td>` : ''}</tr>`).join('')}
+  const mfcCol = perKwhColumn(sup.mfcByMonth), recCol = perKwhColumn(sup.reconciliationByMonth), taxCol = perKwhColumn(sup.taxReimbursementByMonth);
+  const monthTable = () => `<details><summary>Statement values by month</summary><div class="tablewrap"><table><thead><tr><th>Month</th><th class="num">Capacity $/kW-mo</th><th class="num">MFC ${mfcCol.unit}</th>${sup.mode === 'coned_msc' ? `<th class="num">MSC adjustment ${recCol.unit}</th><th class="num">Tax reimbursement ${taxCol.unit}</th>` : ''}</tr></thead><tbody>
+    ${MONTH_NAMES.map((n, m) => `<tr><td>${n}</td><td class="num">${sup.capacityByMonth[m].toFixed(2)}</td><td class="num">${mfcCol.cell(sup.mfcByMonth[m])}</td>${sup.mode === 'coned_msc' ? `<td class="num">${recCol.cell(sup.reconciliationByMonth[m])}</td><td class="num">${taxCol.cell(sup.taxReimbursementByMonth[m])}</td>` : ''}</tr>`).join('')}
     </tbody></table></div></details>`;
   const monthlyAvg = (() => { const idx = stack.idx; const s = new Array(12).fill(0), n = new Array(12).fill(0); for (let t = 0; t < idx.T; t++) { s[idx.month[t] - 1] += sup.energyRate[t]; n[idx.month[t] - 1]++; } return s.map((v, i) => v / n[i]); })();
   const fields = {
     coned_msc: `<div class="grid2">
         ${field('MSC capacity charge', numInput('supply.capacityRate', S.capacityRate, { step: 0.01, unit: '$/kW-mo', nullable: true, placeholder: 'by month' }), `SC ${stack.account.sc} Rate ${roman[stack.account.rateNo]}, ${area}: ${span(sup.capacityByMonth, 2)} $/kW-month${sup.capacityWindows ? ', on weekday demand 8 AM to 6 PM in June to September and 8 AM to 10 PM otherwise' : ', on the monthly maximum demand'}. ${byMonthNote}`)}
-        ${field('Merchant function charge', numInput('supply.mfc', S.mfc, { step: 0.000001, unit: '$/kWh', nullable: true, placeholder: 'by month' }), `${stack.account.sc === 2 ? 'SC 2' : 'SCs 5, 6, 8, 9, 12, 13'} total, ${span(sup.mfcByMonth, 6)} $/kWh. ${byMonthNote}`)}
-        ${field('MSC adjustment factors', numInput('supply.reconciliation', S.reconciliation, { step: 0.000001, unit: '$/kWh', nullable: true, placeholder: 'by month' }), `Each month's MSC reconciliation for ${stack.account.rateNo === 2 ? 'customers who would be on Rider M but for its exemptions (Rate II)' : 'all other customers'}, ${area}: ${span(sup.reconciliationByMonth, 6)} $/kWh, plus the tax reimbursement non-residential customers pay. ${byMonthNote}`)}
+        ${field('Merchant function charge', numInput('supply.mfc', S.mfc, { step: 0.000001, unit: '$/kWh', nullable: true, placeholder: 'by month' }), `${stack.account.sc === 2 ? 'SC 2' : 'SCs 5, 6, 8, 9, 12, 13'} total, ${perKwhSpan(sup.mfcByMonth)}. ${byMonthNote}`)}
+        ${field('MSC adjustment factors', numInput('supply.reconciliation', S.reconciliation, { step: 0.000001, unit: '$/kWh', nullable: true, placeholder: 'by month' }), `Each month's MSC reconciliation for ${stack.account.rateNo === 2 ? 'customers who would be on Rider M but for its exemptions (Rate II)' : 'all other customers'}, ${area}: ${perKwhSpan(sup.reconciliationByMonth)}, plus the tax reimbursement non-residential customers pay. ${byMonthNote}`)}
       </div>
       ${monthTable()}
       <p class="note">Rider M makes hourly pricing mandatory above a size it sets; this tool does not check that. If the account is on Rider M, choose hourly pricing.</p>`,
     coned_mhp: `<div class="grid2">
         ${field('Rider M capacity (ICAP tag)', numInput('supply.capacityRate', S.capacityRate, { step: 0.01, unit: '$/kW-mo', nullable: true, placeholder: 'by month' }), `${area}: ${span(sup.capacityByMonth, 2)} $/kW-month, ${vs ? 'billed every month on the most the account imports in the likely NYISO peak hours (the Alternative 3 commitment hours on the Value Stack step), which is how the tag is set' : "applied to each month's maximum demand (a simplification of the tag)"}. ${byMonthNote}`)}
-        ${field('Merchant function charge', numInput('supply.mfc', S.mfc, { step: 0.000001, unit: '$/kWh', nullable: true, placeholder: 'by month' }), `${stack.account.sc === 2 ? 'SC 2' : 'SCs 5, 6, 8, 9, 12, 13'} total, ${span(sup.mfcByMonth, 6)} $/kWh. ${byMonthNote}`)}
+        ${field('Merchant function charge', numInput('supply.mfc', S.mfc, { step: 0.000001, unit: '$/kWh', nullable: true, placeholder: 'by month' }), `${stack.account.sc === 2 ? 'SC 2' : 'SCs 5, 6, 8, 9, 12, 13'} total, ${perKwhSpan(sup.mfcByMonth)}. ${byMonthNote}`)}
         ${field('MSC adjustment factors', numInput('supply.reconciliation', S.reconciliation, { step: 0.000001, unit: '$/kWh', nullable: true, placeholder: '0' }), 'Not billed under Rider M: the Statement of Adjustment Factors applies to customers on the MSC. Enter a value only to add one.')}
       </div>
       ${monthTable()}`,
@@ -965,7 +969,7 @@ async function stepResults() {
   const sup = R.stack.supply;
   const assumptions = [
     `SC ${R.stack.account.sc} Rate ${roman[state.rateNo]}, ${state.voltage.toUpperCase()}, ${state.region === 'nyc' ? 'New York City' : 'Westchester'} (zone ${R.stack.supply.zone})${edition.rateProvenanceClause(R.stack.tariff)}; ${R.stack.demandIntervalMin}-minute billing demand.`,
-    `Delivery $/kWh adjustments ${R.stack.kwhAdj.toFixed(6)} $/kWh; statements in force on ${esc(data.statements.in_force_on)}.`,
+    kwhAdjNote(R),
     esc(sup.description) + '.',
     ...sup.warnings.map(esc),
     R.stack.account.standby ? `Non-exporting battery: imports never go negative, no Rider R / Value Stack; the building is on standby (Rate ${roman[state.rateNo]}) with and without it.` : `Non-exporting battery: imports never go negative, no Rider R / Value Stack, no standby (Rate IV / V) rates.`,
@@ -1042,7 +1046,7 @@ function resultsValueStack(R) {
     `${ftm ? 'Charging account' : 'Building account with the battery'}: ${accountLabel(R.stack.account)}, ${state.region === 'nyc' ? 'New York City' : 'Westchester'} (zone ${sup.zone})${edition.rateProvenanceClause(R.stack.tariff)}; ${R.stack.demandIntervalMin}-minute billing demand. ${esc(R.stack.account.reason)}`,
     ...(R.stack.account.standby && !ftm ? [+state.rateNo >= 4 ? `The building is on SC ${R.stack.account.sc} standby (Rate ${roman[state.rateNo]}) with and without the battery.` : `The baseline is the building's current SC ${R.stack.account.sc} bill on standard rates; with the battery it moves to standby.`] : []),
     ...(R.stack.account.sc === 9 && R.stack.account.rateNo === 1 ? [MAX_RATE_NOTE] : []),
-    `Delivery $/kWh adjustments ${R.stack.kwhAdj.toFixed(6)} $/kWh; statements in force on ${esc(data.statements.in_force_on)}.`,
+    kwhAdjNote(R),
     esc(sup.description) + '.', ...sup.warnings.map(esc), ...R.stack.notes.map(esc),
     `Value Stack (Rider R A.9(d) with SC 11): credits on each hour's net injection; energy at day-ahead LBMP x ${lf} (General Rule 25.1 losses); Alternative 3 at the ${data.valueStack.statements.length} monthly statements x ${lf}; the DRV and LSRV fixed for 10 years; no environmental component, MTC or Community Credit for storage. The 25-year Value Stack term and escalation are not modelled.`,
     curveNote(R),
@@ -1086,6 +1090,13 @@ function resultsValueStack(R) {
     <ul class="tight">${assumptions.map((a) => `<li>${a}</li>`).join('')}</ul>
     <div class="inline" style="margin-top:1rem"><button type="button" class="btn small" id="dlXlsx">Download pro-forma (XLSX)</button><button type="button" class="btn small" id="dlJson">Download results (JSON)</button><button type="button" class="btn small" id="dlDispatch">Download dispatch (CSV)</button></div>
     <div class="actions"><button type="button" class="btn" data-nav="-1">Back to battery</button><button type="button" class="btn" id="rerun">Change inputs and re-run</button></div>`;
+}
+
+// The delivery $/kWh adjustments a run used; an entered value says so, with
+// the statements' sum beside it.
+function kwhAdjNote(R) {
+  const own = Math.abs(R.stack.kwhAdj - R.stack.kwhAdjDefault) > 1e-12;
+  return `Delivery $/kWh adjustments ${perKwh(R.stack.kwhAdj)}${own ? ` (your value; the statements sum to ${perKwh(R.stack.kwhAdjDefault)})` : ''}; statements in force on ${esc(data.statements.in_force_on)}.`;
 }
 
 // The capacity curve on the results page: Year 1 again with less usable energy.

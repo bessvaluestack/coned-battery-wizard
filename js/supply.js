@@ -20,6 +20,7 @@
 
 import { buildIndex, windowMask, STEPS_PER_HOUR } from './timeidx.js';
 import { mscProvenance, lbmpSource } from './edition.js';
+import { perKwh, perKwhSpan } from './units.js';
 
 export const SUPPLY_MODES = {
   coned_msc: 'Con Edison full service (Market Supply Charge)',
@@ -76,7 +77,10 @@ function byMonth(override, series, scalar) {
   if (v !== null) return new Array(12).fill(v);
   return series ? series.slice() : new Array(12).fill(scalar || 0);
 }
-const span = (a) => (Math.min(...a) === Math.max(...a) ? a[0].toFixed(a[0] < 0.1 ? 6 : 2) : `${Math.min(...a).toFixed(a[0] < 0.1 ? 6 : 2)} to ${Math.max(...a).toFixed(a[0] < 0.1 ? 6 : 2)}`);
+// $/kW-month values, one or a range.
+const span = (a) => (Math.min(...a) === Math.max(...a) ? a[0].toFixed(2) : `${Math.min(...a).toFixed(2)} to ${Math.max(...a).toFixed(2)}`);
+// How a monthly value was set: an entered value applies all year.
+const basis = (override, statements) => (num(override, null) !== null ? 'all year (your value)' : statements);
 
 /**
  * @param cfg  { mode, region: 'nyc'|'westchester', zone: 'J'|'H'|'I', sc: 2|8|9, rateNo: 1|2|3, mfcDefault,
@@ -136,7 +140,7 @@ export function buildSupply(cfg, data) {
     // September and 8-22 in other months (the statement's note).
     if (cfg.rateNo !== 1 && M) capacityWindows = M.capacity_windows_rates_ii_iii;
     components.push({ name: 'Market Supply Charge (energy)', rate: energyMarket });
-    description = `Con Edison MSC lookup ${code}/${win}, zone ${zone}, billed ${z.lookback.from} to ${z.lookback.to} (${z.lookback.periods} billing periods)${mscProvenance(data.msc)}; capacity ${span(capacityByMonth)} $/kW-month by month (${num(cfg.capacityRate, null) !== null ? 'your value' : `each month's statement for ${region === 'nyc' ? 'NYC' : 'Westchester'}, SC ${sc} Rate ${['', 'I', 'II', 'III'][cfg.rateNo]}`}) on ${capacityWindows ? 'the weekday demand 8 AM to 6 PM in June to September and 8 AM to 10 PM otherwise' : 'the monthly max demand'}`;
+    description = `Con Edison MSC lookup ${code}/${win}, zone ${zone}, billed ${z.lookback.from} to ${z.lookback.to} (${z.lookback.periods} billing periods)${mscProvenance(data.msc)}; capacity ${span(capacityByMonth)} $/kW-month ${basis(cfg.capacityRate, `by month (each month's statement for ${region === 'nyc' ? 'NYC' : 'Westchester'}, SC ${sc} Rate ${['', 'I', 'II', 'III'][cfg.rateNo]})`)} on ${capacityWindows ? 'the weekday demand 8 AM to 6 PM in June to September and 8 AM to 10 PM otherwise' : 'the monthly max demand'}`;
     if (cfg.rateNo === 2) warnings.push(`Rate II customers are normally on Rider M hourly pricing; the ${code} series is the Rider M exempt MSC.`);
   } else if (cfg.mode === 'coned_mhp') {
     if (!lbmpHourly) throw new Error(`no LBMP data for zone ${zone}`);
@@ -146,9 +150,9 @@ export function buildSupply(cfg, data) {
     capacityByMonth = byMonth(cfg.capacityRate, M && M.msc_capacity_usd_per_kw_month[region].rider_m_icap_tag, st.msc_capacity_usd_per_kw_month[region].rider_m_icap_tag);
     components.push({ name: 'Rider M day-ahead LBMP (energy)', rate: energyMarket });
     if (cfg.icapTag) {
-      description = `Rider M mandatory hourly pricing: NYISO day-ahead zone ${zone} LBMP (${lbmpSource(data.lbmp[zone])}) laid onto the model year; capacity ${span(capacityByMonth)} $/kW-month by month on the ICAP tag, taken as the most the account imports in the likely NYISO peak hours (the Alternative 3 commitment hours)`;
+      description = `Rider M mandatory hourly pricing: NYISO day-ahead zone ${zone} LBMP (${lbmpSource(data.lbmp[zone])}) laid onto the model year; capacity ${span(capacityByMonth)} $/kW-month ${basis(cfg.capacityRate, 'by month')} on the ICAP tag, taken as the most the account imports in the likely NYISO peak hours (the Alternative 3 commitment hours)`;
     } else {
-      description = `Rider M mandatory hourly pricing: NYISO day-ahead zone ${zone} LBMP (${lbmpSource(data.lbmp[zone])}) laid onto the model year; capacity ${span(capacityByMonth)} $/kW-month by month (the Rider M ICAP tag statements, applied to the monthly max demand - a simplification of the tag mechanism)`;
+      description = `Rider M mandatory hourly pricing: NYISO day-ahead zone ${zone} LBMP (${lbmpSource(data.lbmp[zone])}) laid onto the model year; capacity ${span(capacityByMonth)} $/kW-month ${basis(cfg.capacityRate, 'by month (the Rider M ICAP tag statements)')}, applied to the monthly max demand (a simplification of the tag mechanism)`;
       warnings.push('The Rider M capacity charge is really set by the customer\'s ICAP tag (demand at the NYISO peak hour of the prior year); it is applied here to each month\'s maximum demand.');
     }
   } else if (cfg.mode === 'esco_fixed') {
@@ -156,7 +160,7 @@ export function buildSupply(cfg, data) {
     energyMarket = new Float64Array(T).fill(r);
     capacityByMonth = new Array(12).fill(num(cfg.escoCapacity, 0));
     components.push({ name: 'Third-party supply (fixed)', rate: energyMarket });
-    description = `Third-party supply at a fixed ${r.toFixed(4)} $/kWh` + (capacityByMonth[0] ? ` plus ${capacityByMonth[0].toFixed(2)} $/kW-month` : ' (capacity assumed included)');
+    description = `Third-party supply at a fixed ${perKwh(r)}` + (capacityByMonth[0] ? ` plus ${capacityByMonth[0].toFixed(2)} $/kW-month` : ' (capacity assumed included)');
   } else if (cfg.mode === 'esco_lbmp') {
     if (!lbmpHourly) throw new Error(`no LBMP data for zone ${zone}`);
     const adder = num(cfg.adder, 0.02);
@@ -164,8 +168,8 @@ export function buildSupply(cfg, data) {
     energyMarket = new Float64Array(T);
     for (let t = 0; t < T; t++) energyMarket[t] = lb[t] / 1000 + adder;
     capacityByMonth = new Array(12).fill(num(cfg.escoCapacity, 0));
-    components.push({ name: `Third-party supply (LBMP + ${adder.toFixed(4)})`, rate: energyMarket });
-    description = `Third-party supply at zone ${zone} day-ahead LBMP + ${adder.toFixed(4)} $/kWh adder` + (capacityByMonth[0] ? ` plus ${capacityByMonth[0].toFixed(2)} $/kW-month` : '');
+    components.push({ name: `Third-party supply (LBMP + ${perKwh(adder)})`, rate: energyMarket });
+    description = `Third-party supply at zone ${zone} day-ahead LBMP + a ${perKwh(adder)} adder` + (capacityByMonth[0] ? ` plus ${capacityByMonth[0].toFixed(2)} $/kW-month` : '');
   } else {
     throw new Error(`unknown supply mode ${cfg.mode}`);
   }
@@ -180,7 +184,7 @@ export function buildSupply(cfg, data) {
     components.push({ name: 'Merchant function charge', rate: series(mfc) });
     if (taxReimb.some((v) => v)) components.push({ name: 'Tax reimbursement recovery', rate: series(taxReimb) });
     if (reconciliation.some((v) => v)) components.push({ name: 'MSC adjustment factors', rate: series(reconciliation) });
-    description += `; MFC ${span(mfc)} $/kWh by month` + (onMsc ? `, MSC adjustment factors ${span(reconciliation)} $/kWh by month` : '; no MSC adjustment factors under Rider M');
+    description += `; MFC ${perKwhSpan(mfc)} ${basis(cfg.mfc, 'by month')}` + (onMsc ? `, MSC adjustment factors ${perKwhSpan(reconciliation)} ${basis(cfg.reconciliation, 'by month')}` : '; no MSC adjustment factors under Rider M');
   }
 
   const capacityRate = mean(capacityByMonth);

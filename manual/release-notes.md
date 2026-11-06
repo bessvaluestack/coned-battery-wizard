@@ -11,6 +11,7 @@ Every saved run records it too: a run saved by an earlier version opens with its
 - **Peak matching efficiency**: how much of each month's demand savings a controller working from a day-ahead load forecast can expect to keep, from a forecast error set on the Battery step (5% by default). Shown under the monthly peaks; the pro-forma applies it to demand savings.
 - Each month's own demand savings in the model's Value_Streams (v1.0 repeated January's and February's).
 - The capacity curve by month is no longer written to Wizard_Import (nothing used it); the curve itself stays and still drives degradation.
+- Prices under a cent per kWh show in cents (0.26¢/kWh); a value entered in place of the statements says *your value*, with the statements' figure beside it.
 
 ## 0.6 — October 2026
 
